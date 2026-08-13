@@ -9,19 +9,13 @@ export const CONTROL_SEQUENCES =
   /\u001b?\[[0-9;]+[~A-Za-z]|[\u0000-\u001f\u007f]/g;
 
 interface Props {
-  defaultValue?: string;
   placeholder?: string;
   mask?: boolean;
   onSubmit: (value: string) => void;
 }
 
-export function TextInput({
-  defaultValue = "",
-  placeholder = "",
-  mask = false,
-  onSubmit,
-}: Props) {
-  const [value, setValue] = useState(defaultValue);
+export function TextInput({ placeholder = "", mask = false, onSubmit }: Props) {
+  const [value, setValue] = useState("");
 
   useInput((input, key) => {
     if (key.return) {
@@ -29,7 +23,15 @@ export function TextInput({
       return;
     }
     if (key.backspace || key.delete) {
-      setValue((v) => v.slice(0, -1));
+      // Cmd/Alt+Backspace clears the line: it arrives as meta ("\x1b\x7f") or,
+      // under the kitty protocol, as super. Plain backspace deletes one char.
+      setValue((v) => (key.meta || key.super ? "" : v.slice(0, -1)));
+      return;
+    }
+    // Terminals that map Cmd+Backspace to the readline "kill line" code send
+    // Ctrl+U instead of a backspace key.
+    if (key.ctrl && input === "u") {
+      setValue("");
       return;
     }
     // Ink already blanks `input` for named keys (arrows, esc, tab, ...);

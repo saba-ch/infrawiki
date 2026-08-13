@@ -15,7 +15,6 @@ const CATALOG: Catalog = {
     id: "openai",
     name: "OpenAI",
     env: ["OPENAI_API_KEY"],
-    npm: "@ai-sdk/openai",
     models: {
       "gpt-5": {
         id: "gpt-5",
@@ -32,7 +31,6 @@ const CATALOG: Catalog = {
     id: "azure",
     name: "Azure",
     env: ["AZURE_RESOURCE_NAME", "AZURE_API_KEY"],
-    npm: "@ai-sdk/azure",
     models: {},
   },
 };

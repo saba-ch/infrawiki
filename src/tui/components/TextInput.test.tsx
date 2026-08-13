@@ -27,8 +27,10 @@ test("Shift+Enter escape sequence is not inserted into the value", async () => {
 test("ctrl combos do not insert their letter", async () => {
   const submitted: string[] = [];
   const { stdin } = render(
-    <TextInput defaultValue="x" onSubmit={(value) => submitted.push(value)} />,
+    <TextInput onSubmit={(value) => submitted.push(value)} />,
   );
+  await Bun.sleep(10);
+  stdin.write("x");
   await Bun.sleep(10);
   stdin.write("\x01"); // Ctrl+A
   await Bun.sleep(10);
@@ -55,11 +57,10 @@ test("mask renders bullets, never the secret", async () => {
 test("typing, backspace, and submit work", async () => {
   const submitted: string[] = [];
   const { stdin } = render(
-    <TextInput
-      defaultValue="wiki"
-      onSubmit={(value) => submitted.push(value)}
-    />,
+    <TextInput onSubmit={(value) => submitted.push(value)} />,
   );
+  await Bun.sleep(10);
+  stdin.write("wiki");
   await Bun.sleep(10);
   stdin.write("\x7f"); // backspace -> "wik"
   await Bun.sleep(10);
@@ -68,4 +69,25 @@ test("typing, backspace, and submit work", async () => {
   stdin.write("\r");
   await Bun.sleep(10);
   expect(submitted).toEqual(["wikis"]);
+});
+
+test("cmd/alt+backspace clears the whole line", async () => {
+  const submitted: string[] = [];
+  const { stdin } = render(
+    <TextInput onSubmit={(value) => submitted.push(value)} />,
+  );
+  await Bun.sleep(10);
+  stdin.write("infrawiki");
+  await Bun.sleep(10);
+  stdin.write("\x1b\x7f"); // meta+backspace
+  await Bun.sleep(10);
+  stdin.write("wiki");
+  await Bun.sleep(10);
+  stdin.write("\x15"); // Ctrl+U
+  await Bun.sleep(10);
+  stdin.write("docs");
+  await Bun.sleep(10);
+  stdin.write("\r");
+  await Bun.sleep(10);
+  expect(submitted).toEqual(["docs"]);
 });

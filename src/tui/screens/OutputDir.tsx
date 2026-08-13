@@ -15,7 +15,6 @@ export function OutputDir({ defaultValue, onSubmit }: Props) {
       <Box>
         <Text dimColor>Directory: </Text>
         <TextInput
-          defaultValue={defaultValue}
           placeholder={defaultValue}
           onSubmit={(value) => onSubmit(value.trim() || defaultValue)}
         />

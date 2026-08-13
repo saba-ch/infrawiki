@@ -32,9 +32,7 @@ const CatalogProviderSchema = z.object({
   id: z.string(),
   name: z.string(),
   env: z.array(z.string()).default([]),
-  npm: z.string().optional(),
   api: z.string().optional(),
-  doc: z.string().optional(),
   models: z.record(z.string(), z.unknown()).default({}),
 });
 
@@ -89,12 +87,12 @@ export async function loadCatalog(
   try {
     const res = await fetchFn(MODELS_URL);
     if (!res.ok) throw new Error(`models.dev responded ${res.status}`);
-    const raw = await res.json();
+    const body = await res.text();
     mkdirSync(cacheDir, { recursive: true });
     const tmp = join(cacheDir, "models.json.tmp");
-    writeFileSync(tmp, JSON.stringify(raw));
+    writeFileSync(tmp, body);
     renameSync(tmp, cachePath);
-    return parseCatalog(raw);
+    return parseCatalog(JSON.parse(body));
   } catch {
     if (existsSync(cachePath)) return readCache();
     return undefined;

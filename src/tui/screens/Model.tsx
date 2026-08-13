@@ -16,7 +16,7 @@ type Phase =
   | { id: "deployment"; provider: string }
   | { id: "model"; provider: string }
   | { id: "manual"; provider: string }
-  | { id: "verify"; modelId: string; attempt: number };
+  | { id: "verify"; modelId: string; attempt: number; from: Phase };
 
 export interface ModelProps {
   catalog?: Catalog;
@@ -83,26 +83,20 @@ export function Model({ catalog, store, verify, onSubmit }: ModelProps) {
       id: "verify",
       modelId: `${provider}/${model}`,
       attempt: prev.id === "verify" ? prev.attempt + 1 : 0,
+      // Retries stay on the phase the first attempt came from.
+      from: prev.id === "verify" ? prev.from : prev,
     }));
   };
 
   useInput((input, key) => {
     if (phase.id === "verify") {
-      const { provider, model } = splitModelId(phase.modelId);
-      const back = () => {
-        setPhase(
-          provider === "azure"
-            ? { id: "deployment", provider }
-            : catalog?.[provider] && provider !== CUSTOM_PROVIDER
-              ? { id: "model", provider }
-              : { id: "manual", provider },
-        );
-      };
       if (verifyError) {
-        if (input === "r") startVerify(provider, model);
-        else if (input === "s")
+        if (input === "r") {
+          const { provider, model } = splitModelId(phase.modelId);
+          startVerify(provider, model);
+        } else if (input === "s")
           onSubmit(phase.modelId, providers, `${phase.modelId} (unverified)`);
-        else if (key.escape) back();
+        else if (key.escape) setPhase(phase.from);
       }
       return;
     }

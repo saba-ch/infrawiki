@@ -55,42 +55,19 @@ export class AuthStore {
     chmodSync(this.path, 0o600);
   }
 
-  private providers(): Record<string, unknown> {
-    return (this.readFile().providers ?? {}) as Record<string, unknown>;
-  }
-
   get(id: string): Credential | undefined {
-    const parsed = CredentialSchema.safeParse(this.providers()[id]);
+    const providers = this.readFile().providers as
+      | Record<string, unknown>
+      | undefined;
+    const parsed = CredentialSchema.safeParse(providers?.[id]);
     return parsed.success ? parsed.data : undefined;
   }
 
   set(id: string, credential: Credential): void {
     const data = this.readFile();
-    data.providers = { ...this.providers(), [id]: credential };
+    data.providers = { ...(data.providers as object), [id]: credential };
     this.writeFile(data);
   }
-
-  remove(id: string): void {
-    const data = this.readFile();
-    const providers = this.providers();
-    delete providers[id];
-    data.providers = providers;
-    this.writeFile(data);
-  }
-
-  list(): Record<string, Credential> {
-    const entries: Record<string, Credential> = {};
-    for (const [id, value] of Object.entries(this.providers())) {
-      const parsed = CredentialSchema.safeParse(value);
-      if (parsed.success) entries[id] = parsed.data;
-    }
-    return entries;
-  }
-}
-
-export interface ResolvedAuth {
-  credential: Credential;
-  source: string; // "auth.json" or "$ENV_VAR"
 }
 
 // models.dev env lists include non-secret config vars (AZURE_RESOURCE_NAME);
@@ -106,12 +83,12 @@ export function resolveAuth(
   store: AuthStore,
   providerId: string,
   envNames: string[],
-): ResolvedAuth | undefined {
+): Credential | undefined {
   const stored = store.get(providerId);
-  if (stored) return { credential: stored, source: "auth.json" };
+  if (stored) return stored;
   for (const name of envNames) {
     const key = process.env[name];
-    if (key) return { credential: { type: "api", key }, source: `$${name}` };
+    if (key) return { type: "api", key };
   }
   return undefined;
 }

@@ -67,7 +67,6 @@ interface Props {
   catalog?: Catalog;
   store: AuthStore;
   onDone: (provider: string, options?: ProviderOptions) => void;
-  onBack?: () => void;
 }
 
 function openInBrowser(url: string): void {
@@ -97,7 +96,7 @@ function methodOptions(catalog: Catalog | undefined, provider: string) {
   return options;
 }
 
-export function ProviderAuth({ catalog, store, onDone, onBack }: Props) {
+export function ProviderAuth({ catalog, store, onDone }: Props) {
   const [phase, setPhase] = useState<Phase>({ id: "provider" });
   const [oauth, setOauth] = useState<OAuthView>({ lines: [] });
 
@@ -118,9 +117,6 @@ export function ProviderAuth({ catalog, store, onDone, onBack }: Props) {
   useInput((_input, key) => {
     if (!key.escape) return;
     switch (phase.id) {
-      case "provider":
-        onBack?.();
-        break;
       case "oauth":
         // Leaving the phase unmounts the login effect, which aborts the flow.
         setPhase({ id: "method", provider: phase.provider });

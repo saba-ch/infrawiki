@@ -44,17 +44,16 @@ export async function createModel(
   const options = opts.providers?.[provider];
   const catalogProvider = opts.catalog?.[provider];
 
-  const resolved = resolveAuth(
+  const credential = resolveAuth(
     opts.store,
     provider,
     apiKeyEnvNames(catalogProvider?.env ?? []),
   );
-  if (!resolved) {
+  if (!credential) {
     throw new Error(
       `No credentials for ${provider}. Re-run \`infrawiki init\`.`,
     );
   }
-  const { credential } = resolved;
 
   const freshAccess = (cred: OAuthCredential) => {
     const refresh = FLOWS[provider]?.refresh;

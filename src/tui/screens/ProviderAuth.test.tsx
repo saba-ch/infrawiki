@@ -14,21 +14,18 @@ const CATALOG: Catalog = {
     id: "anthropic",
     name: "Anthropic",
     env: ["ANTHROPIC_API_KEY"],
-    npm: "@ai-sdk/anthropic",
     models: {},
   },
   openai: {
     id: "openai",
     name: "OpenAI",
     env: ["OPENAI_API_KEY"],
-    npm: "@ai-sdk/openai",
     models: {},
   },
   azure: {
     id: "azure",
     name: "Azure",
     env: ["AZURE_RESOURCE_NAME", "AZURE_API_KEY"],
-    npm: "@ai-sdk/azure",
     models: {},
   },
 };
@@ -52,7 +49,6 @@ test("azure api-key path stores the credential 0600", async () => {
       catalog={CATALOG}
       store={store}
       onDone={(p) => done.push(p)}
-      onBack={() => {}}
     />,
   );
   await Bun.sleep(TICK);
@@ -82,7 +78,6 @@ test("detected env var appears as a method that stores nothing", async () => {
         catalog={CATALOG}
         store={store}
         onDone={(p) => done.push(p)}
-        onBack={() => {}}
       />,
     );
     await Bun.sleep(TICK);
@@ -105,12 +100,7 @@ test("detected env var appears as a method that stores nothing", async () => {
 
 test("anthropic oauth shows the extra-usage notice before sign-in", async () => {
   const { stdin, lastFrame } = render(
-    <ProviderAuth
-      catalog={CATALOG}
-      store={store}
-      onDone={() => {}}
-      onBack={() => {}}
-    />,
+    <ProviderAuth catalog={CATALOG} store={store} onDone={() => {}} />,
   );
   await Bun.sleep(TICK);
   stdin.write("\r"); // anthropic
@@ -119,20 +109,4 @@ test("anthropic oauth shows the extra-usage notice before sign-in", async () => 
   stdin.write("\r"); // choose oauth
   await Bun.sleep(TICK);
   expect(lastFrame()).toContain("extra-usage credits");
-});
-
-test("esc from the provider list calls onBack", async () => {
-  let back = 0;
-  const { stdin } = render(
-    <ProviderAuth
-      catalog={CATALOG}
-      store={store}
-      onDone={() => {}}
-      onBack={() => back++}
-    />,
-  );
-  await Bun.sleep(TICK);
-  stdin.write("\x1b");
-  await Bun.sleep(TICK * 2);
-  expect(back).toBe(1);
 });

@@ -35,16 +35,13 @@ const oauthCred = (expires: number): OAuthCredential => ({
 });
 
 describe("AuthStore", () => {
-  test("set/get/list/remove round-trip under the providers namespace", () => {
+  test("set/get round-trip under the providers namespace", () => {
     const store = AuthStore.load(stateDir);
     store.set("openai", API_CRED);
     store.set("azure", { type: "api", key: "az-key" });
     expect(store.get("openai")).toEqual(API_CRED);
-    expect(Object.keys(store.list())).toEqual(["openai", "azure"]);
-    store.remove("openai");
-    expect(store.get("openai")).toBeUndefined();
     const raw = JSON.parse(readFileSync(store.path, "utf8"));
-    expect(Object.keys(raw.providers)).toEqual(["azure"]);
+    expect(Object.keys(raw.providers)).toEqual(["openai", "azure"]);
   });
 
   test("writes the file 0600", () => {
@@ -63,9 +60,7 @@ describe("AuthStore", () => {
   test("preserves sibling namespaces on write", () => {
     const path = join(stateDir, "auth.json");
     writeFileSync(path, JSON.stringify({ sources: { aws: "token" } }));
-    const store = AuthStore.load(stateDir);
-    store.set("openai", API_CRED);
-    store.remove("openai");
+    AuthStore.load(stateDir).set("openai", API_CRED);
     expect(JSON.parse(readFileSync(path, "utf8")).sources).toEqual({
       aws: "token",
     });
@@ -76,7 +71,6 @@ describe("AuthStore", () => {
     writeFileSync(path, JSON.stringify({ providers: { openai: { bad: 1 } } }));
     const store = AuthStore.load(stateDir);
     expect(store.get("openai")).toBeUndefined();
-    expect(store.list()).toEqual({});
   });
 });
 
@@ -86,10 +80,9 @@ describe("resolveAuth", () => {
     try {
       const store = AuthStore.load(stateDir);
       store.set("openai", API_CRED);
-      expect(resolveAuth(store, "openai", ["INFRAWIKI_TEST_KEY"])).toEqual({
-        credential: API_CRED,
-        source: "auth.json",
-      });
+      expect(resolveAuth(store, "openai", ["INFRAWIKI_TEST_KEY"])).toEqual(
+        API_CRED,
+      );
     } finally {
       delete process.env.INFRAWIKI_TEST_KEY;
     }
@@ -102,10 +95,7 @@ describe("resolveAuth", () => {
         "INFRAWIKI_MISSING",
         "INFRAWIKI_TEST_KEY",
       ]);
-      expect(resolved).toEqual({
-        credential: { type: "api", key: "env-key" },
-        source: "$INFRAWIKI_TEST_KEY",
-      });
+      expect(resolved).toEqual({ type: "api", key: "env-key" });
     } finally {
       delete process.env.INFRAWIKI_TEST_KEY;
     }
