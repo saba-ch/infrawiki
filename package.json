@@ -1,0 +1,30 @@
+{
+  "name": "infrawiki",
+  "version": "0.0.1",
+  "description": "Writes and maintains your infrastructure documentation for agents in Open Knowledge Format (OKF)",
+  "license": "Elastic-2.0",
+  "type": "module",
+  "bin": {
+    "infrawiki": "./src/index.ts"
+  },
+  "scripts": {
+    "dev": "bun src/index.ts",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "commander": "^15.0.0",
+    "ink": "^7.1.1",
+    "react": "^19.2.8",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.8",
+    "@types/bun": "^1.3.14",
+    "@types/react": "^19.2.18",
+    "ink-testing-library": "^4.0.0",
+    "typescript": "^7.0.2"
+  }
+}
