@@ -9,6 +9,11 @@ dependency metadata.
 The OAuth provider flows under `src/auth/oauth/` were adapted from Pi's
 `packages/ai/src/auth/oauth/` implementation.
 
+The agent tools under `src/agent/tools/` (tool execute logic, truncation
+behavior, edit matching, streaming output accumulation, child-process wait
+handling in `bash.ts`) were adapted from Pi's
+`packages/coding-agent/src/core/tools/` and `src/utils/` implementations.
+
 - Upstream: https://github.com/earendil-works/pi
 - Package family: `@earendil-works/pi-*`
 - License: MIT

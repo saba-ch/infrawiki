@@ -3,7 +3,11 @@ import { createAzure } from "@ai-sdk/azure";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import type { LanguageModel } from "ai";
+import {
+  defaultSettingsMiddleware,
+  type LanguageModel,
+  wrapLanguageModel,
+} from "ai";
 import { FLOWS } from "./auth/oauth";
 import { anthropicOAuthFetch } from "./auth/oauth/anthropic-transport";
 import { codexOAuthFetch } from "./auth/oauth/codex-transport";
@@ -80,7 +84,7 @@ export async function createModel(
         // ChatGPT Codex backend: Responses API only, scoped to the account id
         // extracted at login; codexOAuthFetch supplies the store/stream shape
         // the backend insists on.
-        return createOpenAI({
+        const codex = createOpenAI({
           apiKey: await freshAccess(credential),
           baseURL: "https://chatgpt.com/backend-api/codex",
           headers: {
@@ -90,6 +94,22 @@ export async function createModel(
           },
           fetch: codexOAuthFetch() as unknown as typeof fetch,
         }).responses(model);
+        // The backend never persists items (store must be false), so multi-step
+        // tool calls 404 when step N+1 references step N's reasoning by id.
+        // Requesting encrypted reasoning makes it round-trip by value instead.
+        return wrapLanguageModel({
+          model: codex,
+          middleware: defaultSettingsMiddleware({
+            settings: {
+              providerOptions: {
+                openai: {
+                  store: false,
+                  include: ["reasoning.encrypted_content"],
+                },
+              },
+            },
+          }),
+        });
       }
       return createOpenAI({ apiKey: credential.key })(model);
     }

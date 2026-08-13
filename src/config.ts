@@ -31,7 +31,6 @@ export type InitCheckpoint = z.infer<typeof InitCheckpointSchema>;
 export type ProviderOptions = z.infer<typeof ProviderOptionsSchema>;
 
 export interface InitResult {
-  configPath: string;
   stateDir: string;
   instructionsPath: string;
 }
@@ -127,6 +126,6 @@ export class Config {
     const instructionsPath = join(outputPath, "instructions.md");
     writeFileSync(instructionsPath, instructions);
 
-    return { configPath: this.configPath, stateDir, instructionsPath };
+    return { stateDir, instructionsPath };
   }
 }

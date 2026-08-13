@@ -1,19 +1,24 @@
 import { Box, Text, useApp, useInput } from "ink";
 import { useEffect, useState } from "react";
+import { runGeneration } from "../agent/loop";
 import { AuthStore } from "../auth/store";
 import type { Catalog } from "../catalog";
 import type { Config, InitCheckpoint, InitResult } from "../config";
+import { createModel, type ProviderModel } from "../model";
+import { GENERATE_HINT, Generate } from "./screens/Generate";
 import { INSTRUCTIONS_HINT, Instructions } from "./screens/Instructions";
 import { MODEL_HINT, Model } from "./screens/Model";
 import { OUTPUT_DIR_HINT, OutputDir } from "./screens/OutputDir";
 import { Welcome } from "./screens/Welcome";
 
 type StepId = InitCheckpoint["step"];
+type UiStep = StepId | "generate";
 
-const STEPS: { id: StepId; label: string }[] = [
+const STEPS: { id: UiStep; label: string }[] = [
   { id: "model", label: "Model" },
   { id: "output-dir", label: "Output" },
   { id: "instructions", label: "Instructions" },
+  { id: "generate", label: "Generate" },
 ];
 
 const STEP_HINTS: Record<StepId, string> = {
@@ -28,9 +33,9 @@ const BADGE = {
   pending: { glyph: "○", color: "gray" },
 } as const;
 
-function seedDetails(config: Config): Partial<Record<StepId, string>> {
+function seedDetails(config: Config): Partial<Record<UiStep, string>> {
   const step = config.checkpoint?.step;
-  const details: Partial<Record<StepId, string>> = {};
+  const details: Partial<Record<UiStep, string>> = {};
   if (step === "output-dir" || step === "instructions") {
     if (config.model) details.model = config.model;
   }
@@ -41,19 +46,26 @@ function seedDetails(config: Config): Partial<Record<StepId, string>> {
 interface Props {
   config: Config;
   catalog?: Promise<Catalog | undefined>;
+  /** Test seam: skips createModel so tests can inject a mock model. */
+  model?: ProviderModel;
 }
 
-export function App({ config, catalog: catalogPromise }: Props) {
+export function App({
+  config,
+  catalog: catalogPromise,
+  model: modelOverride,
+}: Props) {
   const [gated, setGated] = useState(
     config.initialized || config.checkpoint !== undefined,
   );
   const [active, setActive] = useState<StepId>(
     config.checkpoint?.step ?? "model",
   );
-  const [details, setDetails] = useState<Partial<Record<StepId, string>>>(() =>
+  const [details, setDetails] = useState<Partial<Record<UiStep, string>>>(() =>
     seedDetails(config),
   );
   const [result, setResult] = useState<InitResult | null>(null);
+  const [summary, setSummary] = useState<{ error?: string } | null>(null);
   const [store] = useState(() => AuthStore.load(config.stateDir));
   const [catalog, setCatalog] = useState<Catalog | undefined>();
   const [catalogReady, setCatalogReady] = useState(!catalogPromise);
@@ -71,7 +83,8 @@ export function App({ config, catalog: catalogPromise }: Props) {
     };
   }, [catalogPromise]);
 
-  // The model step owns its esc handling (internal phase navigation).
+  // The model step owns its esc handling (internal phase navigation), and the
+  // generate step owns esc as cancel.
   useInput((_input, key) => {
     if (!key.escape || result) return;
     if (active === "output-dir") setActive("model");
@@ -80,12 +93,37 @@ export function App({ config, catalog: catalogPromise }: Props) {
 
   // Exit after the final frame is painted so it stays in the terminal.
   useEffect(() => {
-    if (result) exit();
-  }, [result, exit]);
+    if (summary) exit();
+  }, [summary, exit]);
+
+  const startGeneration = (initResult: InitResult) => (signal: AbortSignal) =>
+    (async () => {
+      const model =
+        modelOverride ??
+        (await createModel({
+          // The model step runs before generate and persists the model id.
+          modelId: config.model as string,
+          store,
+          providers: config.providers,
+          catalog,
+        }));
+      return runGeneration({
+        model,
+        cwd: config.projectDir,
+        instructionsPath: initResult.instructionsPath,
+        outputPath: config.outputPath,
+        stateDir: initResult.stateDir,
+        abortSignal: signal,
+      });
+    })();
 
   // Active step wins over done (revisiting shows ❯), except in the final
   // done state where everything completed shows ✓.
-  const stepStatus = (id: StepId) => {
+  const stepStatus = (id: UiStep) => {
+    if (id === "generate") {
+      if (summary) return "done";
+      return result ? "current" : "pending";
+    }
     if (!result && id === active) return "current";
     if (details[id]) return "done";
     return "pending";
@@ -131,12 +169,36 @@ export function App({ config, catalog: catalogPromise }: Props) {
             })}
           </Box>
           {result ? (
-            <Box flexDirection="column" marginTop={1}>
-              <Text dimColor>Wiki initialized</Text>
-              <Text dimColor> config {result.configPath}</Text>
-              <Text dimColor> state {result.stateDir}</Text>
-              <Text dimColor> model {config.model}</Text>
-            </Box>
+            // The run log stays on screen after the run so the completed
+            // actions remain visible above the summary.
+            <>
+              <Box
+                flexDirection="column"
+                marginTop={1}
+                paddingX={1}
+                borderStyle="round"
+                borderColor="gray"
+              >
+                <Generate
+                  start={startGeneration(result)}
+                  done={summary !== null}
+                  onDone={setSummary}
+                />
+              </Box>
+              {summary ? (
+                <Box flexDirection="column" marginTop={1}>
+                  <Text>
+                    Successfully initialized wiki at {config.outputPath}
+                  </Text>
+                  <Text dimColor>run "infrawiki update" to update</Text>
+                  {summary.error ? (
+                    <Text color="red">generation failed: {summary.error}</Text>
+                  ) : null}
+                </Box>
+              ) : (
+                <Text dimColor>{GENERATE_HINT}</Text>
+              )}
+            </>
           ) : (
             <>
               <Box

@@ -107,7 +107,7 @@ describe("initialize", () => {
     const config = Config.load(projectDir, home);
     config.update({ outputDir: "wiki" });
     const result = config.initialize(DEFAULT_INSTRUCTIONS);
-    expect(existsSync(result.configPath)).toBe(true);
+    expect(existsSync(join(projectDir, "infrawiki.json"))).toBe(true);
     expect(existsSync(join(result.stateDir, "auth.json"))).toBe(true);
     expect(existsSync(join(result.stateDir, "sources"))).toBe(true);
     expect(result.instructionsPath).toBe(
