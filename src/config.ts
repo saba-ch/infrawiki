@@ -5,7 +5,12 @@ import { basename, join, resolve } from "node:path";
 import { z } from "zod";
 
 const InitCheckpointSchema = z.object({
-  step: z.enum(["output-dir", "instructions"]),
+  step: z.enum(["model", "output-dir", "instructions"]),
+});
+
+const ProviderOptionsSchema = z.object({
+  resourceName: z.string().optional(), // azure
+  baseURL: z.string().optional(), // custom openai-compatible endpoints
 });
 
 const ConfigSchema = z.object({
@@ -13,12 +18,17 @@ const ConfigSchema = z.object({
   // Absent = global state dir under ~/.infrawiki/projects/<project-id>.
   // Set to e.g. ".infrawiki" to keep state local to the project.
   stateDir: z.string().optional(),
+  // "provider/model-id", split on the first slash. Secrets live in the state
+  // dir's auth.json, never here.
+  model: z.string().optional(),
+  providers: z.record(z.string(), ProviderOptionsSchema).optional(),
   initialized: z.boolean().default(false),
   init: InitCheckpointSchema.optional(),
 });
 
 type ConfigData = z.infer<typeof ConfigSchema>;
 export type InitCheckpoint = z.infer<typeof InitCheckpointSchema>;
+export type ProviderOptions = z.infer<typeof ProviderOptionsSchema>;
 
 export interface InitResult {
   configPath: string;
@@ -81,6 +91,14 @@ export class Config {
     return this.data.init;
   }
 
+  get model(): string | undefined {
+    return this.data.model;
+  }
+
+  get providers(): Record<string, ProviderOptions> | undefined {
+    return this.data.providers;
+  }
+
   get stateDir(): string {
     if (this.data.stateDir) return resolve(this.projectDir, this.data.stateDir);
     return join(this.home, ".infrawiki", "projects", this.id);
@@ -99,10 +117,10 @@ export class Config {
     this.update({ initialized: true, init: undefined });
 
     const stateDir = this.stateDir;
-    mkdirSync(join(stateDir, "sources"), { recursive: true });
+    mkdirSync(join(stateDir, "sources"), { recursive: true, mode: 0o700 });
     const authPath = join(stateDir, "auth.json");
     // Re-init must not clobber stored credentials.
-    if (!existsSync(authPath)) writeFileSync(authPath, "{}\n");
+    if (!existsSync(authPath)) writeFileSync(authPath, "{}\n", { mode: 0o600 });
 
     const outputPath = this.outputPath;
     mkdirSync(outputPath, { recursive: true });

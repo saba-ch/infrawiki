@@ -37,6 +37,21 @@ test("ctrl combos do not insert their letter", async () => {
   expect(submitted).toEqual(["x"]);
 });
 
+test("mask renders bullets, never the secret", async () => {
+  const submitted: string[] = [];
+  const { stdin, lastFrame } = render(
+    <TextInput mask onSubmit={(value) => submitted.push(value)} />,
+  );
+  await Bun.sleep(10);
+  stdin.write("sk-secret");
+  await Bun.sleep(10);
+  expect(lastFrame()).not.toContain("sk-secret");
+  expect(lastFrame()).toContain("•".repeat(9));
+  stdin.write("\r");
+  await Bun.sleep(10);
+  expect(submitted).toEqual(["sk-secret"]);
+});
+
 test("typing, backspace, and submit work", async () => {
   const submitted: string[] = [];
   const { stdin } = render(

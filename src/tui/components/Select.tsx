@@ -4,6 +4,7 @@ import { useState } from "react";
 interface Option {
   label: string;
   value: string;
+  hint?: string;
 }
 
 interface Props {
@@ -37,6 +38,7 @@ export function Select({ options, onSelect }: Props) {
         >
           {i === index ? "❯ " : "  "}
           {option.label}
+          {option.hint ? <Text dimColor> {option.hint}</Text> : null}
         </Text>
       ))}
     </Box>

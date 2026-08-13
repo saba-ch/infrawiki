@@ -15,6 +15,12 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.38",
+    "@ai-sdk/azure": "^4.0.42",
+    "@ai-sdk/google": "^4.0.43",
+    "@ai-sdk/openai": "^4.0.41",
+    "@ai-sdk/openai-compatible": "^3.0.30",
+    "ai": "^7.0.64",
     "commander": "^15.0.0",
     "ink": "^7.1.1",
     "react": "^19.2.8",

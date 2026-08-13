@@ -23,6 +23,7 @@ program.action(() => {
   }
   console.log(`wiki:  ${config.outputPath}`);
   console.log(`state: ${config.stateDir}`);
+  if (config.model) console.log(`model: ${config.model}`);
 });
 
 program.parse();

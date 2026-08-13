@@ -4,18 +4,21 @@ import { useState } from "react";
 // Terminals emit sequences like "\x1b[27;2;13~" (modifyOtherKeys Shift+Enter)
 // that ink passes through as input; strip them (with or without the leading
 // ESC, since ink may consume it) along with any remaining control chars.
-// biome-ignore lint/suspicious/noControlCharactersInRegex: stripping terminal control sequences is the point
-const CONTROL_SEQUENCES = /\u001b?\[[0-9;]+[~A-Za-z]|[\u0000-\u001f\u007f]/g;
+export const CONTROL_SEQUENCES =
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping terminal control sequences is the point
+  /\u001b?\[[0-9;]+[~A-Za-z]|[\u0000-\u001f\u007f]/g;
 
 interface Props {
   defaultValue?: string;
   placeholder?: string;
+  mask?: boolean;
   onSubmit: (value: string) => void;
 }
 
 export function TextInput({
   defaultValue = "",
   placeholder = "",
+  mask = false,
   onSubmit,
 }: Props) {
   const [value, setValue] = useState(defaultValue);
@@ -38,7 +41,11 @@ export function TextInput({
 
   return (
     <Text>
-      {value ? <Text>{value}</Text> : <Text dimColor>{placeholder}</Text>}
+      {value ? (
+        <Text>{mask ? "•".repeat(value.length) : value}</Text>
+      ) : (
+        <Text dimColor>{placeholder}</Text>
+      )}
       <Text inverse> </Text>
     </Text>
   );

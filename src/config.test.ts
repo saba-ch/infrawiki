@@ -49,6 +49,18 @@ describe("lifecycle", () => {
     expect(reloaded.outputDir).toBe("docs");
     expect(reloaded.initialized).toBe(true);
   });
+
+  test("persists model and provider options without secrets", () => {
+    Config.load(projectDir, home).update({
+      model: "azure/gpt-5.4",
+      providers: { azure: { resourceName: "my-resource" } },
+    });
+    const reloaded = Config.load(projectDir, home);
+    expect(reloaded.model).toBe("azure/gpt-5.4");
+    expect(reloaded.providers).toEqual({
+      azure: { resourceName: "my-resource" },
+    });
+  });
 });
 
 describe("id", () => {
