@@ -3,7 +3,7 @@ import { createAzure } from "@ai-sdk/azure";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { generateText, type LanguageModel } from "ai";
+import type { LanguageModel } from "ai";
 import { FLOWS } from "./auth/oauth";
 import { anthropicOAuthFetch } from "./auth/oauth/anthropic-transport";
 import { codexOAuthFetch } from "./auth/oauth/codex-transport";
@@ -142,9 +142,4 @@ export async function createModel(
       return createOpenAICompatible({ name: provider, baseURL, apiKey })(model);
     }
   }
-}
-
-export async function verifyModel(model: ProviderModel): Promise<void> {
-  // Some providers reject max_output_tokens below 16.
-  await generateText({ model, prompt: "Reply with ok.", maxOutputTokens: 16 });
 }

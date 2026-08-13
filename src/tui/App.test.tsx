@@ -42,13 +42,7 @@ const CATALOG: Catalog = {
 };
 
 function renderApp(config: Config) {
-  return render(
-    <App
-      config={config}
-      catalog={Promise.resolve(CATALOG)}
-      verify={async () => {}}
-    />,
-  );
+  return render(<App config={config} catalog={Promise.resolve(CATALOG)} />);
 }
 
 // Drives the model step: openai -> API key -> masked key -> pick gpt-5.
@@ -63,7 +57,7 @@ async function completeModelStep(stdin: { write: (data: string) => void }) {
   await Bun.sleep(TICK);
   stdin.write("\r");
   await Bun.sleep(TICK);
-  stdin.write("\r"); // select gpt-5, verify stub resolves
+  stdin.write("\r"); // select gpt-5
   await Bun.sleep(TICK);
 }
 

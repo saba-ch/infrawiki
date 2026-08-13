@@ -1,9 +1,8 @@
 import { Box, Text, useInput } from "ink";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { AuthStore } from "../../auth/store";
 import { agentModels, type Catalog } from "../../catalog";
 import type { ProviderOptions } from "../../config";
-import { createModel, splitModelId, verifyModel } from "../../model";
 import { SearchSelect } from "../components/SearchSelect";
 import { TextInput } from "../components/TextInput";
 import { CUSTOM_PROVIDER, ProviderAuth } from "./ProviderAuth";
@@ -15,16 +14,11 @@ type Phase =
   | { id: "resource"; provider: string }
   | { id: "deployment"; provider: string }
   | { id: "model"; provider: string }
-  | { id: "manual"; provider: string }
-  | { id: "verify"; modelId: string; attempt: number; from: Phase };
+  | { id: "manual"; provider: string };
 
 export interface ModelProps {
   catalog?: Catalog;
   store: AuthStore;
-  verify?: (
-    modelId: string,
-    providers: Record<string, ProviderOptions> | undefined,
-  ) => Promise<void>;
   onSubmit: (
     modelId: string,
     providers: Record<string, ProviderOptions> | undefined,
@@ -43,24 +37,11 @@ function formatModelHint(
   return parts.join(" · ");
 }
 
-export function Model({ catalog, store, verify, onSubmit }: ModelProps) {
+export function Model({ catalog, store, onSubmit }: ModelProps) {
   const [phase, setPhase] = useState<Phase>({ id: "auth" });
   const [providers, setProviders] = useState<
     Record<string, ProviderOptions> | undefined
   >();
-  const [verifyError, setVerifyError] = useState<string>();
-
-  const verifyFn =
-    verify ??
-    (async (modelId: string, opts?: Record<string, ProviderOptions>) => {
-      const model = await createModel({
-        modelId,
-        store,
-        providers: opts,
-        catalog,
-      });
-      await verifyModel(model);
-    });
 
   const authDone = (provider: string, options?: ProviderOptions) => {
     if (options) setProviders((p) => ({ ...p, [provider]: options }));
@@ -77,29 +58,12 @@ export function Model({ catalog, store, verify, onSubmit }: ModelProps) {
     }
   };
 
-  const startVerify = (provider: string, model: string) => {
-    setVerifyError(undefined);
-    setPhase((prev) => ({
-      id: "verify",
-      modelId: `${provider}/${model}`,
-      attempt: prev.id === "verify" ? prev.attempt + 1 : 0,
-      // Retries stay on the phase the first attempt came from.
-      from: prev.id === "verify" ? prev.from : prev,
-    }));
+  const submit = (provider: string, model: string) => {
+    const modelId = `${provider}/${model}`;
+    onSubmit(modelId, providers, modelId);
   };
 
-  useInput((input, key) => {
-    if (phase.id === "verify") {
-      if (verifyError) {
-        if (input === "r") {
-          const { provider, model } = splitModelId(phase.modelId);
-          startVerify(provider, model);
-        } else if (input === "s")
-          onSubmit(phase.modelId, providers, `${phase.modelId} (unverified)`);
-        else if (key.escape) setPhase(phase.from);
-      }
-      return;
-    }
+  useInput((_input, key) => {
     if (!key.escape) return;
     switch (phase.id) {
       case "resource":
@@ -114,30 +78,6 @@ export function Model({ catalog, store, verify, onSubmit }: ModelProps) {
         break;
     }
   });
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: verification runs once per verify phase entry
-  useEffect(() => {
-    if (phase.id !== "verify") return;
-    let stale = false;
-    verifyFn(phase.modelId, providers)
-      .then(() => {
-        if (!stale) onSubmit(phase.modelId, providers, phase.modelId);
-      })
-      .catch((error) => {
-        if (stale) return;
-        // AI SDK API errors carry the useful detail in responseBody, not message.
-        const message = error instanceof Error ? error.message : String(error);
-        const body = (error as { responseBody?: unknown }).responseBody;
-        setVerifyError(
-          typeof body === "string" && body && !message.includes(body)
-            ? `${message} — ${body.slice(0, 300)}`
-            : message,
-        );
-      });
-    return () => {
-      stale = true;
-    };
-  }, [phase.id === "verify" ? `${phase.modelId}#${phase.attempt}` : undefined]);
 
   switch (phase.id) {
     case "auth":
@@ -177,7 +117,7 @@ export function Model({ catalog, store, verify, onSubmit }: ModelProps) {
               placeholder="gpt-5.4"
               onSubmit={(value) => {
                 if (!value.trim()) return;
-                startVerify(phase.provider, value.trim());
+                submit(phase.provider, value.trim());
               }}
             />
           </Box>
@@ -197,7 +137,7 @@ export function Model({ catalog, store, verify, onSubmit }: ModelProps) {
           <SearchSelect
             key={`model-${phase.provider}`}
             options={options}
-            onSelect={(model) => startVerify(phase.provider, model)}
+            onSelect={(model) => submit(phase.provider, model)}
           />
         </Box>
       );
@@ -217,25 +157,10 @@ export function Model({ catalog, store, verify, onSubmit }: ModelProps) {
             <TextInput
               onSubmit={(value) => {
                 if (!value.trim()) return;
-                startVerify(phase.provider, value.trim());
+                submit(phase.provider, value.trim());
               }}
             />
           </Box>
-        </Box>
-      );
-
-    case "verify":
-      return (
-        <Box flexDirection="column">
-          <Text bold>Checking {phase.modelId}</Text>
-          {verifyError ? (
-            <Box flexDirection="column" marginTop={1}>
-              <Text color="red">{verifyError}</Text>
-              <Text dimColor>r retry · s skip verification · esc back</Text>
-            </Box>
-          ) : (
-            <Text dimColor>Running a test request…</Text>
-          )}
         </Box>
       );
   }

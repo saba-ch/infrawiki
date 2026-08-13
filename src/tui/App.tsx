@@ -4,7 +4,7 @@ import { AuthStore } from "../auth/store";
 import type { Catalog } from "../catalog";
 import type { Config, InitCheckpoint, InitResult } from "../config";
 import { INSTRUCTIONS_HINT, Instructions } from "./screens/Instructions";
-import { MODEL_HINT, Model, type ModelProps } from "./screens/Model";
+import { MODEL_HINT, Model } from "./screens/Model";
 import { OUTPUT_DIR_HINT, OutputDir } from "./screens/OutputDir";
 import { Welcome } from "./screens/Welcome";
 
@@ -41,10 +41,9 @@ function seedDetails(config: Config): Partial<Record<StepId, string>> {
 interface Props {
   config: Config;
   catalog?: Promise<Catalog | undefined>;
-  verify?: ModelProps["verify"];
 }
 
-export function App({ config, catalog: catalogPromise, verify }: Props) {
+export function App({ config, catalog: catalogPromise }: Props) {
   const [gated, setGated] = useState(
     config.initialized || config.checkpoint !== undefined,
   );
@@ -152,7 +151,6 @@ export function App({ config, catalog: catalogPromise, verify }: Props) {
                     <Model
                       catalog={catalog}
                       store={store}
-                      verify={verify}
                       onSubmit={(modelId, providers, detail) => {
                         config.update({
                           model: modelId,
