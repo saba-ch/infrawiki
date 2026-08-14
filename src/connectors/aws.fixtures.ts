@@ -18,6 +18,7 @@ export const fakeAwsApi = (overrides: Partial<AwsApi> = {}): AwsApi => ({
   }),
   createIndex: async () => {},
   promoteIndex: async () => {},
+  listResources: async () => [],
   ...overrides,
 });
 

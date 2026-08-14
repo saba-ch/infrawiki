@@ -6,7 +6,12 @@ import type { Catalog } from "../catalog";
 import type { Config, InitCheckpoint, InitResult } from "../config";
 import { type AwsApi, createAwsApi } from "../connectors/aws";
 import { createModel, type ProviderModel } from "../model";
-import { clearSources, formatSourcesDetail, listSources } from "../sources";
+import {
+  clearSources,
+  formatSourcesDetail,
+  listSources,
+  syncSources,
+} from "../sources";
 import { GENERATE_HINT, Generate } from "./screens/Generate";
 import { INSTRUCTIONS_HINT, Instructions } from "./screens/Instructions";
 import { MODEL_HINT, Model } from "./screens/Model";
@@ -196,6 +201,12 @@ export function App({
                 borderColor="gray"
               >
                 <Generate
+                  sync={(signal, onProgress) =>
+                    syncSources(awsApi, config.stateDir, {
+                      signal,
+                      onProgress,
+                    })
+                  }
                   start={startGeneration(result)}
                   done={summary !== null}
                   onDone={setSummary}

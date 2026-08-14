@@ -6,7 +6,8 @@ import type { LanguageModelV3StreamPart } from "@ai-sdk/provider";
 import { IndexType } from "@aws-sdk/client-resource-explorer-2";
 import { type ModelMessage, ToolLoopAgent } from "ai";
 import { convertArrayToReadableStream, MockLanguageModelV3 } from "ai/test";
-import { saveSource } from "../sources";
+import { fakeAwsApi } from "../connectors/aws.fixtures";
+import { fetchSource, saveSource, sourceDataDir } from "../sources";
 import { runGeneration } from "./loop";
 import { createTools } from "./tools";
 
@@ -100,13 +101,21 @@ describe("runGeneration", () => {
 
   test("connected sources are injected into the prompt", async () => {
     const stateDir = join(dir, "state");
-    saveSource(stateDir, {
-      type: "aws",
+    const source = {
+      type: "aws" as const,
       profile: "dev",
       accountId: "123456789012",
       regions: [{ name: "us-east-1", index: IndexType.AGGREGATOR }],
       addedAt: "2026-08-14T00:00:00.000Z",
-    });
+    };
+    saveSource(stateDir, source);
+    await fetchSource(
+      fakeAwsApi({
+        listResources: async () => [{ Arn: "arn:aws:s3:::bucket" }],
+      }),
+      stateDir,
+      source,
+    );
     const model = new MockLanguageModelV3({
       doStream: [
         streamOf([
@@ -135,6 +144,10 @@ describe("runGeneration", () => {
     );
     expect(first.content).toContain("Connected sources:");
     expect(first.content).toContain("AWS account 123456789012");
+    // The prompt points at the pre-fetched inventory by absolute path.
+    expect(first.content).toContain(
+      join(sourceDataDir(stateDir, source), "resources.jsonl"),
+    );
     expect(first.content).not.toContain("placeholder infrastructure");
   });
 

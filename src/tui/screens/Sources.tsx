@@ -25,6 +25,7 @@ interface Props {
 export function Sources({ stateDir, api, onContinue, onBack, onHint }: Props) {
   const [phase, setPhase] = useState<Phase>({ id: "list" });
   const [sources, setSources] = useState(() => listSources(stateDir));
+  const [continueError, setContinueError] = useState<string>();
 
   useInput((_input, key) => {
     if (key.escape && phase.id === "list") onBack();
@@ -44,6 +45,7 @@ export function Sources({ stateDir, api, onContinue, onBack, onHint }: Props) {
         onExit={() => {
           // The connector persists as it goes; re-read once on return.
           setSources(listSources(stateDir));
+          setContinueError(undefined);
           setPhase({ id: "list" });
         }}
         onHint={onHint}
@@ -54,6 +56,7 @@ export function Sources({ stateDir, api, onContinue, onBack, onHint }: Props) {
   return (
     <Box flexDirection="column">
       <Text bold>Sources</Text>
+      {continueError ? <Text color="red">{continueError}</Text> : null}
       <Select
         options={[
           ...sources.map((source) => ({
@@ -66,12 +69,25 @@ export function Sources({ stateDir, api, onContinue, onBack, onHint }: Props) {
         ]}
         onSelect={(value) => {
           if (value === "continue") {
+            const incomplete = sources.find(
+              (source) => source.type === "aws" && source.regions.length === 0,
+            );
+            if (incomplete) {
+              setContinueError(
+                `select at least one region for ${sourceLabel(incomplete)}`,
+              );
+              return;
+            }
             onContinue(formatSourcesDetail(sources));
           } else if (value === "add-aws") {
+            setContinueError(undefined);
             setPhase({ id: "aws" });
           } else {
             const existing = sources.find((s) => s.accountId === value);
-            if (existing) setPhase({ id: "aws", existing });
+            if (existing) {
+              setContinueError(undefined);
+              setPhase({ id: "aws", existing });
+            }
           }
         }}
       />

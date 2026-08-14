@@ -1,3 +1,5 @@
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   AccountClient,
   paginateListRegions,
@@ -9,6 +11,9 @@ import {
   type IndexState,
   IndexType,
   paginateListIndexes,
+  paginateListResources,
+  paginateListServiceViews,
+  type Resource,
   ResourceExplorer2Client,
   UpdateIndexTypeCommand,
 } from "@aws-sdk/client-resource-explorer-2";
@@ -72,6 +77,11 @@ export interface AwsApi {
   getIndex(profile: string, region: string): Promise<IndexInfo>;
   createIndex(profile: string, region: string): Promise<void>;
   promoteIndex(profile: string, region: string, arn: string): Promise<void>;
+  listResources(
+    profile: string,
+    region: string,
+    signal?: AbortSignal,
+  ): Promise<Resource[]>;
 }
 
 export function createAwsApi(): AwsApi {
@@ -80,6 +90,7 @@ export function createAwsApi(): AwsApi {
   // per-region clients must not each run their own.
   const chains = new Map<string, AwsCredentialIdentityProvider>();
   const clients = new Map<string, unknown>();
+  const inventoryViews = new Map<string, string>();
   let profiles: Promise<AwsProfile[]> | undefined;
 
   const credentials = (profile: string): AwsCredentialIdentityProvider => {
@@ -116,6 +127,35 @@ export function createAwsApi(): AwsApi {
           credentials: credentials(profile),
         }),
     );
+
+  const inventoryView = async (
+    profile: string,
+    region: string,
+    signal?: AbortSignal,
+  ): Promise<string> => {
+    const key = `${profile}:${region}`;
+    const cached = inventoryViews.get(key);
+    if (cached) return cached;
+
+    const serviceViews: string[] = [];
+    const client = explorer(profile, region);
+    for await (const page of paginateListServiceViews(
+      { client },
+      {},
+      { abortSignal: signal },
+    ))
+      serviceViews.push(...(page.ServiceViews ?? []));
+
+    const arn = serviceViews.find((arn) =>
+      arn.endsWith("/AWSServiceViewForResourceExplorer/service-view"),
+    );
+    if (!arn)
+      throw new Error(
+        `AWS Resource Explorer inventory view is unavailable in ${region}`,
+      );
+    inventoryViews.set(key, arn);
+    return arn;
+  };
 
   return {
     async callerIdentity(profile) {
@@ -183,6 +223,24 @@ export function createAwsApi(): AwsApi {
         new UpdateIndexTypeCommand({ Arn: arn, Type: IndexType.AGGREGATOR }),
       );
     },
+
+    // Use Resource Explorer's unfiltered service-owned view explicitly. This
+    // avoids depending on a user-configured default view, which API-created
+    // indexes do not have automatically.
+    async listResources(profile, region, signal) {
+      const client = explorer(profile, region);
+      const viewArn = await inventoryView(profile, region, signal);
+      const resources: Resource[] = [];
+      for await (const page of paginateListResources(
+        { client },
+        { ViewArn: viewArn },
+        {
+          abortSignal: signal,
+        },
+      ))
+        resources.push(...(page.Resources ?? []));
+      return resources;
+    },
   };
 }
 
@@ -220,6 +278,35 @@ export async function loadRegionRows(
   );
 }
 
+// Pull the source's full resource inventory into <dataDir>/resources.jsonl,
+// one SDK Resource JSON per line, overwriting the previous pull. An
+// aggregator region already returns every region's resources, so it is
+// queried alone; otherwise each selected region is queried in turn.
+export async function fetchAwsResources(
+  api: AwsApi,
+  dataDir: string,
+  source: AwsSource,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (source.regions.length === 0)
+    throw new Error(
+      `Select at least one Resource Explorer region for AWS profile "${source.profile}"`,
+    );
+  const aggregator = source.regions.find(
+    (r) => r.index === IndexType.AGGREGATOR,
+  );
+  const regions = aggregator ? [aggregator] : source.regions;
+  const resources: Resource[] = [];
+  for (const region of regions)
+    resources.push(
+      ...(await api.listResources(source.profile, region.name, signal)),
+    );
+  writeFileSync(
+    join(dataDir, "resources.jsonl"),
+    resources.map((r) => `${JSON.stringify(r)}\n`).join(""),
+  );
+}
+
 // List label for a configured AWS source.
 export function awsLabel(source: AwsSource): string {
   return `aws · ${source.profile} (${source.accountId})`;
@@ -239,8 +326,13 @@ export function awsSummary(source: AwsSource): string {
 }
 
 // The connector's contribution to the generation prompt: what is connected
-// and how the agent explores it with its own shell tool.
-export function awsPrompt(source: AwsSource): string {
+// and how the agent explores it. With `data` (a completed pull) the agent is
+// pointed at the pre-fetched inventory; without it, at the CLI it would use
+// to fetch one itself.
+export function awsPrompt(
+  source: AwsSource,
+  data?: { dir: string; fetchedAt: string },
+): string {
   const regions = source.regions
     .map(
       (r) =>
@@ -252,11 +344,22 @@ export function awsPrompt(source: AwsSource): string {
     )
     .join(", ");
   const flags = `--profile ${source.profile}`;
+  const connected = `AWS account ${source.accountId} is connected via AWS CLI profile "${source.profile}".\n`;
+  const inspect = `Inspect specific resources with the relevant AWS service CLI command, always passing ${flags}.`;
+  if (data)
+    return (
+      connected +
+      `Its full resource inventory was pre-fetched via Resource Explorer at ${data.fetchedAt} from: ${regions}.\n` +
+      `The inventory is at ${join(data.dir, "resources.jsonl")} — one resource per line as JSON ` +
+      "(Arn, Region, ResourceType, Service, CfnResourceType, LastReportedAt). " +
+      "Read and search that file to enumerate resources; do not run resource-explorer-2 yourself.\n" +
+      inspect
+    );
   return (
-    `AWS account ${source.accountId} is connected via AWS CLI profile "${source.profile}".\n` +
+    connected +
     `Query regions via Resource Explorer: ${regions}.\n` +
     `Enumerate resources with: aws resource-explorer-2 list-resources ${flags} --region <region>\n` +
-    `Inspect specific resources with the relevant AWS service CLI command, always passing ${flags}.`
+    inspect
   );
 }
 

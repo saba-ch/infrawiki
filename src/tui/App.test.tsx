@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { LanguageModelV3StreamPart } from "@ai-sdk/provider";
@@ -257,6 +257,48 @@ test("start over wipes configured sources", async () => {
   await Bun.sleep(TICK);
   expect(listSources(config.stateDir)).toEqual([]);
   expect(lastFrame()).toContain("Which model provider");
+});
+
+test("generate syncs configured sources before the run", async () => {
+  const config = Config.load(projectDir, home);
+  config.update({ model: "openai/gpt-5", init: { step: "instructions" } });
+  saveSource(config.stateDir, {
+    type: "aws",
+    profile: "dev",
+    accountId: "123456789012",
+    regions: [{ name: "us-east-1", index: IndexType.AGGREGATOR }],
+    addedAt: "2026-08-14T00:00:00.000Z",
+  });
+  const awsApi = fakeAwsApi({
+    listResources: async () => [{ Arn: "arn:aws:s3:::bucket" }],
+  });
+  const { frames, stdin } = renderApp(
+    Config.load(projectDir, home),
+    mockGenerationModel(),
+    awsApi,
+  );
+  await Bun.sleep(TICK);
+  stdin.write("\r"); // resume at instructions
+  await Bun.sleep(TICK);
+  stdin.write("\r"); // use default instructions
+  await Bun.sleep(TICK * 3);
+  const done = frames.find((frame) =>
+    frame.includes("Successfully initialized wiki at"),
+  );
+  expect(done).toBeDefined();
+  expect(done).not.toContain("generation failed");
+  expect(
+    readFileSync(
+      join(
+        config.stateDir,
+        "sources",
+        "aws-123456789012",
+        "data",
+        "resources.jsonl",
+      ),
+      "utf8",
+    ),
+  ).toBe('{"Arn":"arn:aws:s3:::bucket"}\n');
 });
 
 test("adding an aws source persists it and checkpoints past sources", async () => {

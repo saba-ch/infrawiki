@@ -51,7 +51,7 @@ export async function runGeneration(opts: {
   const prompt = examplePagePrompt(
     relative(opts.cwd, opts.instructionsPath),
     relative(opts.cwd, opts.outputPath),
-    sourcesPrompt(listSources(opts.stateDir)),
+    sourcesPrompt(opts.stateDir, listSources(opts.stateDir)),
   );
   append({ role: "user", content: prompt });
 

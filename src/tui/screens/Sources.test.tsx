@@ -61,18 +61,29 @@ test("empty state continues with no sources", async () => {
 
 test("source without selected regions warns", async () => {
   saveSource(stateDir, source());
-  const { lastFrame } = render(
+  let continued = false;
+  const { lastFrame, stdin } = render(
     <Sources
       onHint={noop}
       stateDir={stateDir}
       api={fakeAwsApi()}
-      onContinue={noop}
+      onContinue={() => {
+        continued = true;
+      }}
       onBack={noop}
     />,
   );
   await Bun.sleep(TICK);
   expect(lastFrame()).toContain("aws · dev (123456789012)");
   expect(lastFrame()).toContain("⚠ no regions selected");
+  stdin.write("\x1b[B\x1b[B"); // down to Continue
+  await Bun.sleep(TICK);
+  stdin.write("\r");
+  await Bun.sleep(TICK);
+  expect(continued).toBe(false);
+  expect(lastFrame()).toContain(
+    "select at least one region for aws · dev (123456789012)",
+  );
 });
 
 test("selected regions show with their index type", async () => {
