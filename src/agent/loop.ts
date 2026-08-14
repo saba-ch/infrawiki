@@ -2,6 +2,7 @@ import { appendFileSync, mkdirSync } from "node:fs";
 import { join, relative } from "node:path";
 import { ToolLoopAgent } from "ai";
 import type { ProviderModel } from "../model";
+import { listSources, sourcesPrompt } from "../sources";
 import { createTools } from "./tools";
 
 const SYSTEM_PROMPT =
@@ -12,13 +13,16 @@ const SYSTEM_PROMPT =
 function examplePagePrompt(
   instructionsPath: string,
   outputPath: string,
+  sources: string,
 ): string {
-  return (
+  const base =
     `Read the wiki instructions at ${instructionsPath}. ` +
     `Then write ONE example wiki page to ${outputPath}/example.md showing what a page in this wiki will look like, ` +
-    "following the instructions. Use plausible placeholder infrastructure (e.g. a small AWS account). " +
-    "Keep it under about 60 lines. Do not create or modify any other files."
-  );
+    "following the instructions. " +
+    "Keep it under about 60 lines. Do not create or modify any other files. ";
+  if (!sources)
+    return `${base}Use plausible placeholder infrastructure (e.g. a small AWS account).`;
+  return `${base}Ground the example in the connected sources below instead of inventing infrastructure.\n\n${sources}`;
 }
 
 /**
@@ -47,6 +51,7 @@ export async function runGeneration(opts: {
   const prompt = examplePagePrompt(
     relative(opts.cwd, opts.instructionsPath),
     relative(opts.cwd, opts.outputPath),
+    sourcesPrompt(listSources(opts.stateDir)),
   );
   append({ role: "user", content: prompt });
 

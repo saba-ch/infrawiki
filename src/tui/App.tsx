@@ -4,11 +4,14 @@ import { runGeneration } from "../agent/loop";
 import { AuthStore } from "../auth/store";
 import type { Catalog } from "../catalog";
 import type { Config, InitCheckpoint, InitResult } from "../config";
+import { type AwsApi, createAwsApi } from "../connectors/aws";
 import { createModel, type ProviderModel } from "../model";
+import { clearSources, formatSourcesDetail, listSources } from "../sources";
 import { GENERATE_HINT, Generate } from "./screens/Generate";
 import { INSTRUCTIONS_HINT, Instructions } from "./screens/Instructions";
 import { MODEL_HINT, Model } from "./screens/Model";
 import { OUTPUT_DIR_HINT, OutputDir } from "./screens/OutputDir";
+import { Sources } from "./screens/Sources";
 import { Welcome } from "./screens/Welcome";
 
 type StepId = InitCheckpoint["step"];
@@ -16,12 +19,15 @@ type UiStep = StepId | "generate";
 
 const STEPS: { id: UiStep; label: string }[] = [
   { id: "model", label: "Model" },
+  { id: "sources", label: "Sources" },
   { id: "output-dir", label: "Output" },
   { id: "instructions", label: "Instructions" },
   { id: "generate", label: "Generate" },
 ];
 
-const STEP_HINTS: Record<StepId, string> = {
+// The sources step's hint is dynamic (reported by the screen per phase);
+// the rest are static.
+const STEP_HINTS: Record<Exclude<StepId, "sources">, string> = {
   model: MODEL_HINT,
   "output-dir": OUTPUT_DIR_HINT,
   instructions: INSTRUCTIONS_HINT,
@@ -36,8 +42,11 @@ const BADGE = {
 function seedDetails(config: Config): Partial<Record<UiStep, string>> {
   const step = config.checkpoint?.step;
   const details: Partial<Record<UiStep, string>> = {};
-  if (step === "output-dir" || step === "instructions") {
+  if (step === "sources" || step === "output-dir" || step === "instructions") {
     if (config.model) details.model = config.model;
+  }
+  if (step === "output-dir" || step === "instructions") {
+    details.sources = formatSourcesDetail(listSources(config.stateDir));
   }
   if (step === "instructions") details["output-dir"] = config.outputDir;
   return details;
@@ -48,12 +57,15 @@ interface Props {
   catalog?: Promise<Catalog | undefined>;
   /** Test seam: skips createModel so tests can inject a mock model. */
   model?: ProviderModel;
+  /** Test seam: fake AWS client layer for the sources step. */
+  awsApi?: AwsApi;
 }
 
 export function App({
   config,
   catalog: catalogPromise,
   model: modelOverride,
+  awsApi: awsApiOverride,
 }: Props) {
   const [gated, setGated] = useState(
     config.initialized || config.checkpoint !== undefined,
@@ -67,6 +79,9 @@ export function App({
   const [result, setResult] = useState<InitResult | null>(null);
   const [summary, setSummary] = useState<{ error?: string } | null>(null);
   const [store] = useState(() => AuthStore.load(config.stateDir));
+  // Lazy: constructing the real API does no IO until a method is called.
+  const [awsApi] = useState(() => awsApiOverride ?? createAwsApi());
+  const [sourcesHint, setSourcesHint] = useState("");
   const [catalog, setCatalog] = useState<Catalog | undefined>();
   const [catalogReady, setCatalogReady] = useState(!catalogPromise);
   const { exit } = useApp();
@@ -83,11 +98,11 @@ export function App({
     };
   }, [catalogPromise]);
 
-  // The model step owns its esc handling (internal phase navigation), and the
-  // generate step owns esc as cancel.
+  // The model and sources steps own their esc handling (internal phase
+  // navigation), and the generate step owns esc as cancel.
   useInput((_input, key) => {
     if (!key.escape || result) return;
-    if (active === "output-dir") setActive("model");
+    if (active === "output-dir") setActive("sources");
     else if (active === "instructions") setActive("output-dir");
   });
 
@@ -140,6 +155,7 @@ export function App({
             initialized={config.initialized}
             onStart={(mode) => {
               if (mode === "fresh") {
+                clearSources(config.stateDir);
                 setDetails({});
                 setActive("model");
               }
@@ -217,15 +233,28 @@ export function App({
                         config.update({
                           model: modelId,
                           providers: { ...config.providers, ...providers },
-                          init: { step: "output-dir" },
+                          init: { step: "sources" },
                         });
                         setDetails((d) => ({ ...d, model: detail }));
-                        setActive("output-dir");
+                        setActive("sources");
                       }}
                     />
                   ) : (
                     <Text dimColor>Loading model catalog…</Text>
                   ))}
+                {active === "sources" && (
+                  <Sources
+                    stateDir={config.stateDir}
+                    api={awsApi}
+                    onHint={setSourcesHint}
+                    onBack={() => setActive("model")}
+                    onContinue={(detail) => {
+                      config.update({ init: { step: "output-dir" } });
+                      setDetails((d) => ({ ...d, sources: detail }));
+                      setActive("output-dir");
+                    }}
+                  />
+                )}
                 {active === "output-dir" && (
                   <OutputDir
                     defaultValue={details["output-dir"] ?? config.outputDir}
@@ -249,8 +278,9 @@ export function App({
                 )}
               </Box>
               <Text dimColor>
-                {STEP_HINTS[active]}
-                {active === "model" ? "" : " · esc back"}
+                {active === "sources"
+                  ? sourcesHint
+                  : `${STEP_HINTS[active]}${active === "model" ? "" : " · esc back"}`}
               </Text>
             </>
           )}

@@ -5,7 +5,7 @@ import { basename, join, resolve } from "node:path";
 import { z } from "zod";
 
 const InitCheckpointSchema = z.object({
-  step: z.enum(["model", "output-dir", "instructions"]),
+  step: z.enum(["model", "sources", "output-dir", "instructions"]),
 });
 
 const ProviderOptionsSchema = z.object({

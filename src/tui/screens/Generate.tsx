@@ -1,6 +1,7 @@
 import { Text, useInput } from "ink";
 import { useEffect, useRef, useState } from "react";
 import type { runGeneration } from "../../agent/loop";
+import { useSpinner } from "../components/useSpinner";
 
 interface Props {
   start: (signal: AbortSignal) => ReturnType<typeof runGeneration>;
@@ -10,7 +11,6 @@ interface Props {
 
 export const GENERATE_HINT = "esc cancel";
 
-const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const DETAIL_CHARS = 60;
 
 function toolCallDetail(input: unknown): string {
@@ -30,21 +30,12 @@ export function Generate({ start, done, onDone }: Props) {
     failures: 0,
     current: "",
   });
-  const [frame, setFrame] = useState(0);
+  const spinner = useSpinner(!done);
   const controllerRef = useRef(new AbortController());
 
   useInput((_input, key) => {
     if (key.escape) controllerRef.current.abort();
   });
-
-  useEffect(() => {
-    if (done) return;
-    const timer = setInterval(
-      () => setFrame((f) => (f + 1) % SPINNER_FRAMES.length),
-      140,
-    );
-    return () => clearInterval(timer);
-  }, [done]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: the run starts once on mount; start/onDone are stable closures from App
   useEffect(() => {
@@ -89,8 +80,7 @@ export function Generate({ start, done, onDone }: Props) {
   if (!done) {
     return (
       <Text color="cyan">
-        {SPINNER_FRAMES[frame]} Running{" "}
-        {formatCount(count, "action", "actions")}: {current}
+        {spinner} Running {formatCount(count, "action", "actions")}: {current}
       </Text>
     );
   }

@@ -11,6 +11,10 @@ interface Option {
 interface Props {
   options: Option[];
   onSelect: (value: string) => void;
+  /** Fired on tab for the highlighted option. */
+  onTab?: (value: string) => void;
+  /** Fired on right arrow for the highlighted option. */
+  onRightArrow?: (value: string) => void;
 }
 
 const PLACEHOLDER = "type to filter";
@@ -18,7 +22,12 @@ const MAX_VISIBLE = 8;
 
 // Type-to-filter select for long lists (providers, models). Substring match
 // on label and value, windowed to MAX_VISIBLE rows around the highlight.
-export function SearchSelect({ options, onSelect }: Props) {
+export function SearchSelect({
+  options,
+  onSelect,
+  onTab,
+  onRightArrow,
+}: Props) {
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState(0);
 
@@ -33,6 +42,7 @@ export function SearchSelect({ options, onSelect }: Props) {
   const clamped = Math.min(index, Math.max(filtered.length - 1, 0));
 
   useInput((input, key) => {
+    const selected = filtered[clamped];
     if (key.upArrow) {
       setIndex(clamped > 0 ? clamped - 1 : Math.max(filtered.length - 1, 0));
       return;
@@ -42,8 +52,15 @@ export function SearchSelect({ options, onSelect }: Props) {
       return;
     }
     if (key.return) {
-      const selected = filtered[clamped];
       if (selected) onSelect(selected.value);
+      return;
+    }
+    if (key.tab) {
+      if (selected && onTab) onTab(selected.value);
+      return;
+    }
+    if (key.rightArrow) {
+      if (selected && onRightArrow) onRightArrow(selected.value);
       return;
     }
     if (key.backspace || key.delete) {

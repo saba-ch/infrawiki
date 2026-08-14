@@ -3,8 +3,10 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { LanguageModelV3StreamPart } from "@ai-sdk/provider";
+import { IndexType } from "@aws-sdk/client-resource-explorer-2";
 import { type ModelMessage, ToolLoopAgent } from "ai";
 import { convertArrayToReadableStream, MockLanguageModelV3 } from "ai/test";
+import { saveSource } from "../sources";
 import { runGeneration } from "./loop";
 import { createTools } from "./tools";
 
@@ -92,6 +94,48 @@ describe("runGeneration", () => {
       "assistant",
     ]);
     expect(lines[0].content).toContain("example wiki page");
+    // No sources connected: the prompt falls back to placeholder infra.
+    expect(lines[0].content).toContain("placeholder infrastructure");
+  });
+
+  test("connected sources are injected into the prompt", async () => {
+    const stateDir = join(dir, "state");
+    saveSource(stateDir, {
+      type: "aws",
+      profile: "dev",
+      accountId: "123456789012",
+      regions: [{ name: "us-east-1", index: IndexType.AGGREGATOR }],
+      addedAt: "2026-08-14T00:00:00.000Z",
+    });
+    const model = new MockLanguageModelV3({
+      doStream: [
+        streamOf([
+          { type: "text-start", id: "t1" },
+          { type: "text-delta", id: "t1", delta: "ok" },
+          { type: "text-end", id: "t1" },
+          {
+            type: "finish",
+            finishReason: { unified: "stop", raw: undefined },
+            usage: USAGE,
+          },
+        ]),
+      ],
+    });
+    const { result, logPath } = await runGeneration({
+      model,
+      cwd: dir,
+      instructionsPath: join(dir, "infrawiki/instructions.md"),
+      outputPath: join(dir, "infrawiki"),
+      stateDir,
+    });
+    for await (const _ of result.fullStream) {
+    }
+    const first = JSON.parse(
+      readFileSync(logPath, "utf-8").trim().split("\n")[0] as string,
+    );
+    expect(first.content).toContain("Connected sources:");
+    expect(first.content).toContain("AWS account 123456789012");
+    expect(first.content).not.toContain("placeholder infrastructure");
   });
 
   test("run log replays as messages into a fresh agent", async () => {

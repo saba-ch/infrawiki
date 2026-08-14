@@ -41,6 +41,13 @@ describe("lifecycle", () => {
     expect(reloaded.checkpoint).toEqual({ step: "instructions" });
   });
 
+  test("checkpoints the sources step", () => {
+    Config.load(projectDir, home).update({ init: { step: "sources" } });
+    expect(Config.load(projectDir, home).checkpoint).toEqual({
+      step: "sources",
+    });
+  });
+
   test("updating a field keeps the others", () => {
     const config = Config.load(projectDir, home);
     config.update({ outputDir: "docs" });
