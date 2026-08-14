@@ -5,7 +5,7 @@ import { AuthStore } from "../auth/store";
 import type { Catalog } from "../catalog";
 import type { Config, InitCheckpoint, InitResult } from "../config";
 import { type AwsApi, createAwsApi } from "../connectors/aws";
-import { createModel, type ProviderModel } from "../model";
+import { createModel, type ProviderModel, splitModelId } from "../model";
 import {
   clearSources,
   formatSourcesDetail,
@@ -129,12 +129,17 @@ export function App({
           providers: config.providers,
           catalog,
         }));
+      const { provider, model: modelName } = splitModelId(
+        config.model as string,
+      );
       return runGeneration({
         model,
         cwd: config.projectDir,
         instructionsPath: initResult.instructionsPath,
         outputPath: config.outputPath,
         stateDir: initResult.stateDir,
+        // Unknown window (catalog unavailable) just disables compaction.
+        contextWindow: catalog?.[provider]?.models[modelName]?.limit?.context,
         abortSignal: signal,
       });
     })();

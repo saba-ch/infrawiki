@@ -8,7 +8,7 @@ import { type ModelMessage, ToolLoopAgent } from "ai";
 import { convertArrayToReadableStream, MockLanguageModelV3 } from "ai/test";
 import { devSource, fakeAwsApi } from "../connectors/aws.fixtures";
 import { fetchSource, saveSource, sourceDataDir } from "../sources";
-import { runGeneration } from "./loop";
+import { replayRunLog, runGeneration } from "./loop";
 import { createTools } from "./tools";
 
 const USAGE = {
@@ -211,6 +211,146 @@ describe("runGeneration", () => {
     // The model saw the full logged history: prompt, tool call, tool result.
     const seen = resumeModel.doStreamCalls[0]?.prompt ?? [];
     expect(seen.map((m) => m.role)).toEqual(["user", "assistant", "tool"]);
+  });
+
+  test("compaction fires mid-run, is logged, and the log replays", async () => {
+    // Big tool-call inputs overflow the keep-recent budget so a cut exists;
+    // the tiny context window makes the usage threshold fire immediately.
+    const bigWrite = (id: string, path: string) =>
+      streamOf([
+        {
+          type: "tool-call" as const,
+          toolCallId: id,
+          toolName: "write",
+          input: JSON.stringify({ path, content: "x".repeat(90000) }),
+        },
+        {
+          type: "finish" as const,
+          finishReason: { unified: "tool-calls" as const, raw: undefined },
+          usage: USAGE,
+        },
+      ]);
+    const model = new MockLanguageModelV3({
+      doStream: [
+        bigWrite("c1", "infrawiki/one.md"),
+        bigWrite("c2", "infrawiki/two.md"),
+        streamOf([
+          { type: "text-start", id: "t1" },
+          { type: "text-delta", id: "t1", delta: "Wiki done." },
+          { type: "text-end", id: "t1" },
+          {
+            type: "finish",
+            finishReason: { unified: "stop", raw: undefined },
+            usage: USAGE,
+          },
+        ]),
+      ],
+      doGenerate: async () => ({
+        content: [{ type: "text", text: "CHECKPOINT: wrote the first page" }],
+        finishReason: { unified: "stop", raw: undefined },
+        usage: USAGE,
+        warnings: [],
+      }),
+    });
+
+    const { result, logPath } = await runGeneration({
+      model,
+      cwd: dir,
+      instructionsPath: join(dir, "infrawiki/instructions.md"),
+      outputPath: join(dir, "infrawiki"),
+      stateDir: join(dir, "state"),
+      contextWindow: 8000,
+    });
+    for await (const _ of result.fullStream) {
+    }
+    expect(await result.text).toBe("Wiki done.");
+
+    // The final step ran against the compacted context: initial prompt and
+    // checkpoint survive, the first write's history is gone.
+    const finalPrompt = JSON.stringify(model.doStreamCalls[2]?.prompt);
+    expect(finalPrompt).toContain("Earlier history was compacted");
+    expect(finalPrompt).toContain("CHECKPOINT: wrote the first page");
+    expect(finalPrompt).toContain("_skeleton.md");
+    expect(finalPrompt).toContain("two.md");
+    expect(finalPrompt).not.toContain("one.md");
+    // The summarizer saw the compacted-away history.
+    expect(JSON.stringify(model.doGenerateCalls[0]?.prompt)).toContain(
+      "one.md",
+    );
+
+    const lines = readFileSync(logPath, "utf-8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    const compactions = lines.filter((l) => l.type === "compaction");
+    expect(compactions.length).toBe(1);
+    expect(compactions[0].kept).toBe(2);
+    expect(compactions[0].summary).toContain("CHECKPOINT");
+
+    // Replay folds the compaction line back into the live context shape.
+    const replayed = replayRunLog(lines);
+    expect(replayed.map((m) => m.role)).toEqual([
+      "user",
+      "user",
+      "assistant",
+      "tool",
+      "assistant",
+    ]);
+    const resumeModel = new MockLanguageModelV3({
+      doStream: [
+        streamOf([
+          { type: "text-start", id: "t1" },
+          { type: "text-delta", id: "t1", delta: "Resumed." },
+          { type: "text-end", id: "t1" },
+          {
+            type: "finish",
+            finishReason: { unified: "stop", raw: undefined },
+            usage: USAGE,
+          },
+        ]),
+      ],
+    });
+    const agent = new ToolLoopAgent({
+      model: resumeModel,
+      tools: createTools(dir),
+    });
+    const resumed = await agent.stream({ messages: replayed });
+    expect(await resumed.text).toBe("Resumed.");
+    const seen = JSON.stringify(resumeModel.doStreamCalls[0]?.prompt);
+    expect(seen).toContain("CHECKPOINT: wrote the first page");
+    expect(seen).not.toContain("one.md");
+  });
+
+  test("no compaction while usage stays clear of the window", async () => {
+    const model = new MockLanguageModelV3({
+      doStream: [
+        streamOf([
+          { type: "text-start", id: "t1" },
+          { type: "text-delta", id: "t1", delta: "ok" },
+          { type: "text-end", id: "t1" },
+          {
+            type: "finish",
+            finishReason: { unified: "stop", raw: undefined },
+            usage: USAGE,
+          },
+        ]),
+      ],
+    });
+    const { result, logPath } = await runGeneration({
+      model,
+      cwd: dir,
+      instructionsPath: join(dir, "infrawiki/instructions.md"),
+      outputPath: join(dir, "infrawiki"),
+      stateDir: join(dir, "state"),
+      contextWindow: 200000,
+    });
+    for await (const _ of result.fullStream) {
+    }
+    const lines = readFileSync(logPath, "utf-8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    expect(lines.some((l) => l.type === "compaction")).toBe(false);
   });
 
   test("model error is surfaced in the stream; log keeps only messages", async () => {

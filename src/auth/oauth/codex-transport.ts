@@ -30,23 +30,32 @@ export function codexOAuthFetch(
     if (wantsStream || !response.ok) return response;
 
     const text = await response.text();
+    // The final response object arrives with an empty `output` (store is
+    // false), so collect the completed output items from the stream events
+    // and patch them in for the non-streaming parser.
+    const items: unknown[] = [];
     for (const line of text.split("\n")) {
       if (!line.startsWith("data:")) continue;
-      let event: { type?: string; response?: unknown };
+      let event: {
+        type?: string;
+        item?: unknown;
+        response?: { output?: unknown[] };
+      };
       try {
         event = JSON.parse(line.slice(5));
       } catch {
         continue;
       }
+      if (event.type === "response.output_item.done") items.push(event.item);
       if (
         event.type === "response.completed" ||
         event.type === "response.incomplete" ||
         event.type === "response.failed"
       ) {
-        return new Response(JSON.stringify(event.response), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
+        return new Response(
+          JSON.stringify({ ...event.response, output: items }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
       }
     }
     return new Response(
