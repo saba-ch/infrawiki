@@ -67,7 +67,7 @@ test("profile pick validates, saves the source, and shows regions", async () => 
   expect(lastFrame()).toContain("local index");
 });
 
-test("auth failure shows the sso hint and retry recovers", async () => {
+test("auth failure shows the error and retry recovers", async () => {
   let calls = 0;
   const api = fakeApi({
     callerIdentity: async () => {
@@ -89,7 +89,6 @@ test("auth failure shows the sso hint and retry recovers", async () => {
   stdin.write("\r");
   await Bun.sleep(TICK * 2);
   expect(lastFrame()).toContain("Token is expired");
-  expect(lastFrame()).toContain("run `aws sso login --profile dev`");
   stdin.write("\r"); // Retry
   await Bun.sleep(TICK * 2);
   expect(lastFrame()).toContain("Regions · dev (123456789012)");

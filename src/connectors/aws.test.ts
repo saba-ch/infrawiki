@@ -6,7 +6,6 @@ import { IndexState, IndexType } from "@aws-sdk/client-resource-explorer-2";
 import {
   type AwsSource,
   awsPrompt,
-  describeAwsError,
   fetchAwsResources,
   listAwsProfiles,
   loadRegionRows,
@@ -213,20 +212,4 @@ test("awsPrompt with a completed pull points at the inventory file", () => {
   expect(prompt).toContain(
     "Inspect specific resources with the relevant AWS service CLI command, always passing --profile dev",
   );
-});
-
-test("describeAwsError adds an sso login hint", () => {
-  const err = Object.assign(
-    new Error(
-      "Token is expired. To refresh this SSO session run 'aws sso login' with the corresponding profile.",
-    ),
-    { name: "CredentialsProviderError" },
-  );
-  expect(describeAwsError(err, "dev")).toEqual({
-    message: err.message,
-    hint: "run `aws sso login --profile dev`",
-  });
-  expect(describeAwsError(new Error("Region is missing"), "dev")).toEqual({
-    message: "Region is missing",
-  });
 });

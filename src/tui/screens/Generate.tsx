@@ -103,7 +103,6 @@ export function Generate({ sync, start, done, onDone }: Props) {
         <Text bold color="red">
           !! sync failed for {syncFailure.label}: {syncFailure.message}
         </Text>
-        {syncFailure.hint ? <Text dimColor>{syncFailure.hint}</Text> : null}
         {done ? null : <Text dimColor>r retry · esc cancel</Text>}
       </>
     );

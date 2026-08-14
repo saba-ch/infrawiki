@@ -362,14 +362,3 @@ export function awsPrompt(
     inspect
   );
 }
-
-export function describeAwsError(
-  err: unknown,
-  profile: string,
-): { message: string; hint?: string } {
-  const message = err instanceof Error ? err.message : String(err);
-  // Every SSO-expiry variant from the SDK says to run `aws sso login`.
-  if (message.includes("aws sso login"))
-    return { message, hint: `run \`aws sso login --profile ${profile}\`` };
-  return { message };
-}

@@ -5,7 +5,6 @@ import {
   type AwsApi,
   type AwsProfile,
   type AwsSource,
-  describeAwsError,
   type IndexInfo,
   listAwsProfiles,
   loadRegionRows,
@@ -22,7 +21,7 @@ const REGIONS_HINT = "tab select · → index actions · enter continue · esc b
 type Phase =
   | { id: "profiles" }
   | { id: "validating"; profile: string }
-  | { id: "auth-error"; profile: string; message: string; hint?: string }
+  | { id: "auth-error"; profile: string; message: string }
   | { id: "regions"; source: AwsSource }
   | { id: "region-action"; source: AwsSource; region: string };
 
@@ -79,10 +78,7 @@ export function AwsConnector({
   );
   const [profiles, setProfiles] = useState<AwsProfile[]>();
   const [rows, setRows] = useState<RegionRow[]>();
-  const [regionsError, setRegionsError] = useState<{
-    message: string;
-    hint?: string;
-  }>();
+  const [regionsError, setRegionsError] = useState<string>();
   const [actionError, setActionError] = useState<string>();
 
   const pending = (rows ?? [])
@@ -125,7 +121,7 @@ export function AwsConnector({
           .then((info) => setRowIndex(region, info));
       } else {
         setRowIndex(region, undefined);
-        setActionError(describeAwsError(err, source.profile).message);
+        setActionError((err as Error).message);
       }
     });
   };
@@ -143,7 +139,7 @@ export function AwsConnector({
       setActionError(
         (err as Error).name === "ConflictException"
           ? "another region is already the aggregator — demote it first (24h cooldown applies)"
-          : describeAwsError(err, source.profile).message,
+          : (err as Error).message,
       );
     });
   };
@@ -192,8 +188,11 @@ export function AwsConnector({
       },
       (err) => {
         if (stale) return;
-        const { message, hint } = describeAwsError(err, profile);
-        setPhase({ id: "auth-error", profile, message, hint });
+        setPhase({
+          id: "auth-error",
+          profile,
+          message: (err as Error).message,
+        });
       },
     );
     return () => {
@@ -215,7 +214,7 @@ export function AwsConnector({
     loadRegionRows(api, streamProfile, (loaded) => {
       if (!stale) setRows(loaded);
     }).catch((err) => {
-      if (!stale) setRegionsError(describeAwsError(err, streamProfile));
+      if (!stale) setRegionsError((err as Error).message);
     });
     return () => {
       stale = true;
@@ -237,7 +236,7 @@ export function AwsConnector({
           setRowIndex(region, info);
         } catch (err) {
           if (stale) return;
-          setActionError(describeAwsError(err, streamProfile).message);
+          setActionError((err as Error).message);
         }
         // Resource Explorer caps non-Search calls at 3/sec.
         await Bun.sleep(350);
@@ -322,7 +321,6 @@ export function AwsConnector({
       return (
         <Box flexDirection="column">
           <Text color="red">{phase.message}</Text>
-          {phase.hint ? <Text dimColor>{phase.hint}</Text> : null}
           <Select
             options={[
               { label: "Retry", value: "retry" },
@@ -344,10 +342,7 @@ export function AwsConnector({
       if (regionsError)
         return (
           <Box flexDirection="column">
-            <Text color="red">{regionsError.message}</Text>
-            {regionsError.hint ? (
-              <Text dimColor>{regionsError.hint}</Text>
-            ) : null}
+            <Text color="red">{regionsError}</Text>
           </Box>
         );
       if (!rows) return <Text color="cyan">{spinner} Loading regions…</Text>;

@@ -140,7 +140,6 @@ test("syncSources fetches in order and reports the first failure", async () => {
   expect(failure).toEqual({
     label: "aws · dev (123456789012)",
     message: expect.stringContaining("aws sso login"),
-    hint: "run `aws sso login --profile dev`",
   });
   // Stops at the first failing source.
   expect(calls).toEqual(["dev"]);

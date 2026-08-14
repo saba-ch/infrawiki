@@ -39,7 +39,6 @@ test("sync failure blocks the run until r retries", async () => {
   const failure: SyncFailure = {
     label: "aws · dev (123456789012)",
     message: "Token is expired",
-    hint: "run `aws sso login --profile dev`",
   };
   const sync = async () => {
     syncCalls += 1;
@@ -60,7 +59,6 @@ test("sync failure blocks the run until r retries", async () => {
   const frame = lastFrame();
   expect(frame).toContain("sync failed for aws · dev (123456789012)");
   expect(frame).toContain("Token is expired");
-  expect(frame).toContain("run `aws sso login --profile dev`");
   expect(frame).toContain("r retry · esc cancel");
   expect(startCalls).toBe(0);
 

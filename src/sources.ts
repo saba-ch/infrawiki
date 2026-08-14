@@ -14,7 +14,6 @@ import {
   awsLabel,
   awsPrompt,
   awsSummary,
-  describeAwsError,
   fetchAwsResources,
 } from "./connectors/aws";
 
@@ -64,10 +63,9 @@ export function clearSources(stateDir: string): void {
   rmSync(join(stateDir, "sources"), { recursive: true, force: true });
 }
 
-// Each connector defines the prompt, label, summary, fetch, and error
-// description for its own sources; these only route by the source's type. The
-// switches are exhaustive — a new connector in the union fails typecheck
-// until it is wired here.
+// Each connector defines the prompt, label, summary, and fetch for its own
+// sources; these only route by the source's type. The switches are exhaustive
+// — a new connector in the union fails typecheck until it is wired here.
 function connectorPrompt(stateDir: string, source: Source): string {
   switch (source.type) {
     case "aws": {
@@ -107,20 +105,9 @@ export async function fetchSource(
   );
 }
 
-function describeSourceError(
-  source: Source,
-  err: unknown,
-): { message: string; hint?: string } {
-  switch (source.type) {
-    case "aws":
-      return describeAwsError(err, source.profile);
-  }
-}
-
 export interface SyncFailure {
   label: string;
   message: string;
-  hint?: string;
 }
 
 // Refresh every source's raw data before a run. Stops at the first failure
@@ -139,7 +126,7 @@ export async function syncSources(
       if (opts.signal?.aborted) throw err;
       return {
         label: sourceLabel(source),
-        ...describeSourceError(source, err),
+        message: (err as Error).message,
       };
     }
   }
