@@ -71,7 +71,7 @@ export function Generate({ sync, start, done, onDone }: Props) {
         for await (const part of result.fullStream) {
           if (part.type === "tool-call") {
             const current = `${part.toolName} ${toolCallDetail(part.input)}`;
-            setActions((a) => ({ ...a, count: a.count + 1, current }));
+            setActions((a) => ({ count: a.count + 1, current }));
           } else if (part.type === "error") {
             error =
               part.error instanceof Error

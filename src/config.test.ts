@@ -125,6 +125,22 @@ describe("initialize", () => {
     );
   });
 
+  test("seeds the OKF bundle root without clobbering an existing wiki", () => {
+    const config = Config.load(projectDir, home);
+    config.initialize(DEFAULT_INSTRUCTIONS);
+    const indexPath = join(config.outputPath, "index.md");
+    const logPath = join(config.outputPath, "log.md");
+    expect(readFileSync(indexPath, "utf8")).toBe(
+      '---\nokf_version: "0.2"\n---\n',
+    );
+    expect(readFileSync(logPath, "utf8")).toBe("");
+    writeFileSync(indexPath, "populated index");
+    writeFileSync(logPath, "populated log");
+    Config.load(projectDir, home).initialize(DEFAULT_INSTRUCTIONS);
+    expect(readFileSync(indexPath, "utf8")).toBe("populated index");
+    expect(readFileSync(logPath, "utf8")).toBe("populated log");
+  });
+
   test("writes custom instructions", () => {
     const result = Config.load(projectDir, home).initialize(
       "Focus on networking.",

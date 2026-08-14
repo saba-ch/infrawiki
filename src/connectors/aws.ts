@@ -281,7 +281,8 @@ export async function loadRegionRows(
 // Pull the source's full resource inventory into <dataDir>/resources.jsonl,
 // one SDK Resource JSON per line, overwriting the previous pull. An
 // aggregator region already returns every region's resources, so it is
-// queried alone; otherwise each selected region is queried in turn.
+// queried alone; otherwise the selected regions are queried concurrently
+// (Resource Explorer rate limits are per-region).
 export async function fetchAwsResources(
   api: AwsApi,
   dataDir: string,
@@ -296,11 +297,11 @@ export async function fetchAwsResources(
     (r) => r.index === IndexType.AGGREGATOR,
   );
   const regions = aggregator ? [aggregator] : source.regions;
-  const resources: Resource[] = [];
-  for (const region of regions)
-    resources.push(
-      ...(await api.listResources(source.profile, region.name, signal)),
-    );
+  const resources = (
+    await Promise.all(
+      regions.map((r) => api.listResources(source.profile, r.name, signal)),
+    )
+  ).flat();
   writeFileSync(
     join(dataDir, "resources.jsonl"),
     resources.map((r) => `${JSON.stringify(r)}\n`).join(""),

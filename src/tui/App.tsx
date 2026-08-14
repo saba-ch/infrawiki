@@ -82,6 +82,8 @@ export function App({
     seedDetails(config),
   );
   const [result, setResult] = useState<InitResult | null>(null);
+  // summary with result === null means init finished without a generation run
+  // (no sources connected) — the skip branch is the only other setSummary site.
   const [summary, setSummary] = useState<{ error?: string } | null>(null);
   const [store] = useState(() => AuthStore.load(config.stateDir));
   // Lazy: constructing the real API does no IO until a method is called.
@@ -141,10 +143,10 @@ export function App({
   // done state where everything completed shows ✓.
   const stepStatus = (id: UiStep) => {
     if (id === "generate") {
-      if (summary) return "done";
-      return result ? "current" : "pending";
+      if (!result) return "pending";
+      return summary ? "done" : "current";
     }
-    if (!result && id === active) return "current";
+    if (!result && !summary && id === active) return "current";
     if (details[id]) return "done";
     return "pending";
   };
@@ -192,40 +194,43 @@ export function App({
           {result ? (
             // The run log stays on screen after the run so the completed
             // actions remain visible above the summary.
-            <>
-              <Box
-                flexDirection="column"
-                marginTop={1}
-                paddingX={1}
-                borderStyle="round"
-                borderColor="gray"
-              >
-                <Generate
-                  sync={(signal, onProgress) =>
-                    syncSources(awsApi, config.stateDir, {
-                      signal,
-                      onProgress,
-                    })
-                  }
-                  start={startGeneration(result)}
-                  done={summary !== null}
-                  onDone={setSummary}
-                />
-              </Box>
-              {summary ? (
-                <Box flexDirection="column" marginTop={1}>
-                  <Text>
-                    Successfully initialized wiki at {config.outputPath}
-                  </Text>
-                  <Text dimColor>run "infrawiki update" to update</Text>
-                  {summary.error ? (
-                    <Text color="red">generation failed: {summary.error}</Text>
-                  ) : null}
-                </Box>
+            <Box
+              flexDirection="column"
+              marginTop={1}
+              paddingX={1}
+              borderStyle="round"
+              borderColor="gray"
+            >
+              <Generate
+                sync={(signal, onProgress) =>
+                  syncSources(awsApi, config.stateDir, {
+                    signal,
+                    onProgress,
+                  })
+                }
+                start={startGeneration(result)}
+                done={summary !== null}
+                onDone={setSummary}
+              />
+            </Box>
+          ) : null}
+          {summary ? (
+            <Box flexDirection="column" marginTop={1}>
+              <Text>Successfully initialized wiki at {config.outputPath}</Text>
+              {result ? (
+                <Text dimColor>run "infrawiki update" to update</Text>
               ) : (
-                <Text dimColor>{GENERATE_HINT}</Text>
+                <Text dimColor>
+                  no sources connected — run "infrawiki init" again to connect
+                  one and generate the wiki
+                </Text>
               )}
-            </>
+              {summary.error ? (
+                <Text color="red">generation failed: {summary.error}</Text>
+              ) : null}
+            </Box>
+          ) : result ? (
+            <Text dimColor>{GENERATE_HINT}</Text>
           ) : (
             <>
               <Box
@@ -283,7 +288,12 @@ export function App({
                   <Instructions
                     onSubmit={(instructions, detail) => {
                       setDetails((d) => ({ ...d, instructions: detail }));
-                      setResult(config.initialize(instructions));
+                      const initResult = config.initialize(instructions);
+                      // Nothing to generate from without a source; finish init
+                      // and point the user at connecting one.
+                      if (listSources(config.stateDir).length === 0)
+                        setSummary({});
+                      else setResult(initResult);
                     }}
                   />
                 )}

@@ -11,7 +11,7 @@ import {
   loadRegionRows,
   type RegionRow,
 } from "./aws";
-import { awsFilesFixture, fakeAwsApi } from "./aws.fixtures";
+import { awsFilesFixture, devSource, fakeAwsApi } from "./aws.fixtures";
 
 awsFilesFixture();
 
@@ -107,15 +107,8 @@ test("loadRegionRows reports progressively and checks only indexed regions", asy
   ]);
 });
 
-function awsSource(regions: AwsSource["regions"]): AwsSource {
-  return {
-    type: "aws",
-    profile: "dev",
-    accountId: "123456789012",
-    regions,
-    addedAt: "2026-08-14T00:00:00.000Z",
-  };
-}
+const awsSource = (regions: AwsSource["regions"]): AwsSource =>
+  devSource({ regions });
 
 function withDataDir(run: (dataDir: string) => Promise<void>): Promise<void> {
   const dataDir = mkdtempSync(join(tmpdir(), "infrawiki-data-"));
@@ -175,16 +168,12 @@ test("fetchAwsResources rejects a source with no regions", () =>
   }));
 
 test("awsPrompt tells the agent what is connected and how to explore it", () => {
-  const prompt = awsPrompt({
-    type: "aws",
-    profile: "dev",
-    accountId: "123456789012",
-    regions: [
+  const prompt = awsPrompt(
+    awsSource([
       { name: "eu-west-1", index: IndexType.LOCAL },
       { name: "us-east-1", index: IndexType.AGGREGATOR },
-    ],
-    addedAt: "2026-08-14T00:00:00.000Z",
-  });
+    ]),
+  );
   expect(prompt).toContain(
     'AWS account 123456789012 is connected via AWS CLI profile "dev"',
   );

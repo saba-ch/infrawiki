@@ -4,10 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { IndexState, IndexType } from "@aws-sdk/client-resource-explorer-2";
 import { render } from "ink-testing-library";
-import type { AwsApi, AwsSource } from "../../connectors/aws";
+import type { AwsApi } from "../../connectors/aws";
 import {
   awsFilesFixture,
   DEV_PROFILE,
+  devSource,
   fakeAwsApi,
 } from "../../connectors/aws.fixtures";
 import { listSources, sourcePath } from "../../sources";
@@ -33,13 +34,7 @@ const fakeApi = (overrides: Partial<AwsApi> = {}): AwsApi =>
     ...overrides,
   });
 
-const existing: AwsSource = {
-  type: "aws",
-  profile: "dev",
-  accountId: "123456789012",
-  regions: [],
-  addedAt: "2026-08-14T00:00:00.000Z",
-};
+const existing = devSource({ regions: [] });
 
 const noop = () => {};
 

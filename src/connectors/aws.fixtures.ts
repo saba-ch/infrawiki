@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { IndexState, IndexType } from "@aws-sdk/client-resource-explorer-2";
-import type { AwsApi } from "./aws";
+import type { AwsApi, AwsSource } from "./aws";
 
 /** Stub AwsApi with benign defaults; override the calls a test cares about. */
 export const fakeAwsApi = (overrides: Partial<AwsApi> = {}): AwsApi => ({
@@ -19,6 +19,19 @@ export const fakeAwsApi = (overrides: Partial<AwsApi> = {}): AwsApi => ({
   createIndex: async () => {},
   promoteIndex: async () => {},
   listResources: async () => [],
+  ...overrides,
+});
+
+/**
+ * Saved dev source whose accountId matches fakeAwsApi's callerIdentity;
+ * override the fields a test varies.
+ */
+export const devSource = (overrides: Partial<AwsSource> = {}): AwsSource => ({
+  type: "aws",
+  profile: "dev",
+  accountId: "123456789012",
+  regions: [{ name: "us-east-1", index: IndexType.LOCAL }],
+  addedAt: "2026-08-14T00:00:00.000Z",
   ...overrides,
 });
 

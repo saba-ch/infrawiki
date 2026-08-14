@@ -12,6 +12,7 @@ import type { AwsApi } from "../connectors/aws";
 import {
   awsFilesFixture,
   DEV_PROFILE,
+  devSource,
   fakeAwsApi,
 } from "../connectors/aws.fixtures";
 import { listSources, saveSource } from "../sources";
@@ -148,7 +149,7 @@ test("fresh project starts on the model step", async () => {
   expect(lastFrame()).toContain("Which model provider");
 });
 
-test("full run: model -> output -> instructions -> generate -> done", async () => {
+test("full run without sources initializes but skips generation", async () => {
   const { frames, lastFrame, stdin } = renderApp(
     Config.load(projectDir, home),
     mockGenerationModel(),
@@ -167,35 +168,46 @@ test("full run: model -> output -> instructions -> generate -> done", async () =
   expect(lastFrame()).toContain("❯ Instructions");
   stdin.write("\r"); // use default instructions
   await Bun.sleep(TICK * 2);
-  const generating = frames.find((frame) => frame.includes("❯ Generate"));
-  expect(generating).toBeDefined();
   const done = frames.find((frame) =>
     frame.includes("Successfully initialized wiki at"),
   );
   expect(done).toBeDefined();
   expect(done).toContain("✓ Model");
-  expect(done).toContain("✓ Generate");
-  // The run log persists into the done state, openwiki-style.
-  expect(done).toContain("Ran 1 action");
-  expect(done).toContain('run "infrawiki update" to update');
-  expect(existsSync(join(projectDir, "infrawiki/example.md"))).toBe(true);
+  expect(done).toContain("○ Generate");
+  expect(done).toContain("no sources connected");
+  // No run started: the bundle root only holds the seeded files.
+  expect(existsSync(join(projectDir, "infrawiki/index.md"))).toBe(true);
+  expect(existsSync(join(projectDir, "infrawiki/example.md"))).toBe(false);
   const reloaded = Config.load(projectDir, home);
   expect(reloaded.initialized).toBe(true);
   expect(reloaded.model).toBe("openai/gpt-5");
 });
 
 test("generation error still shows init summary with the failure", async () => {
+  const config = Config.load(projectDir, home);
+  config.update({ model: "openai/gpt-5", init: { step: "instructions" } });
+  saveSource(
+    config.stateDir,
+    devSource({
+      regions: [{ name: "us-east-1", index: IndexType.AGGREGATOR }],
+    }),
+  );
   const model = new MockLanguageModelV3({
     doStream: [streamOf([{ type: "error", error: new Error("boom") }])],
   });
-  const { frames, stdin } = renderApp(Config.load(projectDir, home), model);
+  const awsApi = fakeAwsApi({
+    listResources: async () => [{ Arn: "arn:aws:s3:::bucket" }],
+  });
+  const { frames, stdin } = renderApp(
+    Config.load(projectDir, home),
+    model,
+    awsApi,
+  );
   await Bun.sleep(TICK);
-  await completeModelStep(stdin);
-  await completeSourcesStep(stdin);
-  stdin.write("\r"); // accept default output dir
+  stdin.write("\r"); // resume at instructions
   await Bun.sleep(TICK);
   stdin.write("\r"); // use default instructions
-  await Bun.sleep(TICK * 2);
+  await Bun.sleep(TICK * 3);
   const done = frames.find((frame) =>
     frame.includes("Successfully initialized wiki at"),
   );
@@ -241,13 +253,12 @@ test("unfinished setup resumes with model and output details seeded", async () =
 test("start over wipes configured sources", async () => {
   const config = Config.load(projectDir, home);
   config.update({ model: "openai/gpt-5", init: { step: "sources" } });
-  saveSource(config.stateDir, {
-    type: "aws",
-    profile: "dev",
-    accountId: "123456789012",
-    regions: [{ name: "us-east-1", index: IndexType.LOCAL }],
-    addedAt: "2026-08-14T00:00:00.000Z",
-  });
+  saveSource(
+    config.stateDir,
+    devSource({
+      regions: [{ name: "us-east-1", index: IndexType.LOCAL }],
+    }),
+  );
   const { lastFrame, stdin } = renderApp(Config.load(projectDir, home));
   await Bun.sleep(TICK);
   expect(lastFrame()).toContain("Found an unfinished setup.");
@@ -262,13 +273,12 @@ test("start over wipes configured sources", async () => {
 test("generate syncs configured sources before the run", async () => {
   const config = Config.load(projectDir, home);
   config.update({ model: "openai/gpt-5", init: { step: "instructions" } });
-  saveSource(config.stateDir, {
-    type: "aws",
-    profile: "dev",
-    accountId: "123456789012",
-    regions: [{ name: "us-east-1", index: IndexType.AGGREGATOR }],
-    addedAt: "2026-08-14T00:00:00.000Z",
-  });
+  saveSource(
+    config.stateDir,
+    devSource({
+      regions: [{ name: "us-east-1", index: IndexType.AGGREGATOR }],
+    }),
+  );
   const awsApi = fakeAwsApi({
     listResources: async () => [{ Arn: "arn:aws:s3:::bucket" }],
   });

@@ -8,13 +8,11 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { IndexType } from "@aws-sdk/client-resource-explorer-2";
-import { fakeAwsApi } from "./connectors/aws.fixtures";
+import { fakeAwsApi, devSource as source } from "./connectors/aws.fixtures";
 import {
   fetchSource,
   formatSourcesDetail,
   listSources,
-  type Source,
   saveSource,
   sourceDataDir,
   sourcePath,
@@ -30,15 +28,6 @@ beforeEach(() => {
 
 afterEach(() => {
   rmSync(stateDir, { recursive: true, force: true });
-});
-
-const source = (patch: Partial<Source> = {}): Source => ({
-  type: "aws",
-  profile: "dev",
-  accountId: "123456789012",
-  regions: [{ name: "us-east-1", index: IndexType.LOCAL }],
-  addedAt: "2026-08-14T00:00:00.000Z",
-  ...patch,
 });
 
 test("save then list round-trips", () => {

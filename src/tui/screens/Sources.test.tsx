@@ -7,6 +7,7 @@ import { render } from "ink-testing-library";
 import {
   awsFilesFixture,
   DEV_PROFILE,
+  devSource,
   fakeAwsApi,
 } from "../../connectors/aws.fixtures";
 import { type Source, saveSource } from "../../sources";
@@ -25,14 +26,8 @@ afterEach(() => {
 
 const TICK = 30;
 
-const source = (patch: Partial<Source> = {}): Source => ({
-  type: "aws",
-  profile: "dev",
-  accountId: "123456789012",
-  regions: [],
-  addedAt: "2026-08-14T00:00:00.000Z",
-  ...patch,
-});
+const source = (patch: Partial<Source> = {}): Source =>
+  devSource({ regions: [], ...patch });
 
 const noop = () => {};
 

@@ -35,6 +35,10 @@ export interface InitResult {
   instructionsPath: string;
 }
 
+// Single source of truth for the OKF version: seeded into the bundle root
+// here and stated in the agent's system prompt (agent/loop.ts).
+export const OKF_VERSION = "0.2";
+
 export const DEFAULT_INSTRUCTIONS = `# Wiki instructions
 
 These instructions guide how InfraWiki generates and maintains this wiki.
@@ -125,6 +129,14 @@ export class Config {
     mkdirSync(outputPath, { recursive: true });
     const instructionsPath = join(outputPath, "instructions.md");
     writeFileSync(instructionsPath, instructions);
+
+    // Seed the OKF bundle root; the agent fills bodies. Re-init must not wipe
+    // a populated wiki root, so only write what's missing.
+    const indexPath = join(outputPath, "index.md");
+    if (!existsSync(indexPath))
+      writeFileSync(indexPath, `---\nokf_version: "${OKF_VERSION}"\n---\n`);
+    const logPath = join(outputPath, "log.md");
+    if (!existsSync(logPath)) writeFileSync(logPath, "");
 
     return { stateDir, instructionsPath };
   }

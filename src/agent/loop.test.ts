@@ -6,7 +6,7 @@ import type { LanguageModelV3StreamPart } from "@ai-sdk/provider";
 import { IndexType } from "@aws-sdk/client-resource-explorer-2";
 import { type ModelMessage, ToolLoopAgent } from "ai";
 import { convertArrayToReadableStream, MockLanguageModelV3 } from "ai/test";
-import { fakeAwsApi } from "../connectors/aws.fixtures";
+import { devSource, fakeAwsApi } from "../connectors/aws.fixtures";
 import { fetchSource, saveSource, sourceDataDir } from "../sources";
 import { runGeneration } from "./loop";
 import { createTools } from "./tools";
@@ -94,20 +94,18 @@ describe("runGeneration", () => {
       "tool",
       "assistant",
     ]);
-    expect(lines[0].content).toContain("example wiki page");
-    // No sources connected: the prompt falls back to placeholder infra.
-    expect(lines[0].content).toContain("placeholder infrastructure");
+    expect(lines[0].content).toContain("_skeleton.md");
+    // The system prompt stamps OKF provenance with the run's model id.
+    const instructions = model.doStreamCalls[0]?.prompt[0];
+    expect(JSON.stringify(instructions)).toContain("infrawiki/mock-model-id");
+    expect(JSON.stringify(instructions)).toContain('okf_version: \\"0.2\\"');
   });
 
   test("connected sources are injected into the prompt", async () => {
     const stateDir = join(dir, "state");
-    const source = {
-      type: "aws" as const,
-      profile: "dev",
-      accountId: "123456789012",
+    const source = devSource({
       regions: [{ name: "us-east-1", index: IndexType.AGGREGATOR }],
-      addedAt: "2026-08-14T00:00:00.000Z",
-    };
+    });
     saveSource(stateDir, source);
     await fetchSource(
       fakeAwsApi({
@@ -148,7 +146,7 @@ describe("runGeneration", () => {
     expect(first.content).toContain(
       join(sourceDataDir(stateDir, source), "resources.jsonl"),
     );
-    expect(first.content).not.toContain("placeholder infrastructure");
+    expect(first.content).toContain("never invent infrastructure");
   });
 
   test("run log replays as messages into a fresh agent", async () => {
