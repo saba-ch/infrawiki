@@ -346,7 +346,9 @@ export function awsPrompt(
     .join(", ");
   const flags = `--profile ${source.profile}`;
   const connected = `AWS account ${source.accountId} is connected via AWS CLI profile "${source.profile}".\n`;
-  const inspect = `Inspect specific resources with the relevant AWS service CLI command, always passing ${flags}.`;
+  const inspect =
+    `Inspect specific resources with the relevant AWS service CLI command, always passing ${flags}.\n` +
+    "Omit AWS-created default resources (default VPCs, default security groups/subnets/route tables, service-linked roles, and the like) unless something actually uses them.";
   if (data)
     return (
       connected +
