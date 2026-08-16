@@ -72,6 +72,14 @@ describe("AuthStore", () => {
     const store = AuthStore.load(stateDir);
     expect(store.get("openai")).toBeUndefined();
   });
+
+  test("providers lists stored ids", () => {
+    const store = AuthStore.load(stateDir);
+    expect(store.providers()).toEqual([]);
+    store.set("openai", API_CRED);
+    store.set("anthropic", oauthCred(Date.now() + 1000));
+    expect(store.providers()).toEqual(["openai", "anthropic"]);
+  });
 });
 
 describe("resolveAuth", () => {

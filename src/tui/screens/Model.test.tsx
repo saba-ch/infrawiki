@@ -37,36 +37,41 @@ const CATALOG: Catalog = {
 
 let stateDir: string;
 let store: AuthStore;
-let submitted: {
+let picked: {
   modelId: string;
   providers?: Record<string, ProviderOptions>;
-  detail: string;
 }[];
+let continued: number;
 
 beforeEach(() => {
   stateDir = mkdtempSync(join(tmpdir(), "infrawiki-state-"));
   store = AuthStore.load(stateDir);
-  submitted = [];
+  picked = [];
+  continued = 0;
 });
 
 afterEach(() => {
   rmSync(stateDir, { recursive: true, force: true });
 });
 
-function renderModel() {
+function renderModel(props?: { configuredModel?: string }) {
   return render(
     <Model
       catalog={CATALOG}
       store={store}
-      onSubmit={(modelId, providers, detail) =>
-        submitted.push({ modelId, providers, detail })
-      }
+      configuredModel={props?.configuredModel}
+      onPick={(modelId, providers) => picked.push({ modelId, providers })}
+      onContinue={() => continued++}
+      onBack={() => {}}
     />,
   );
 }
 
-test("openai key -> model select -> submit", async () => {
+test("add provider -> openai key -> model select -> pick returns to list", async () => {
   const { stdin, lastFrame } = renderModel();
+  await Bun.sleep(TICK);
+  expect(lastFrame()).toContain("Add provider");
+  stdin.write("\r"); // fresh store: Add provider is the first row
   await Bun.sleep(TICK);
   stdin.write("\r"); // openai ranks first
   await Bun.sleep(TICK);
@@ -82,13 +87,16 @@ test("openai key -> model select -> submit", async () => {
   expect(lastFrame()).toContain("400k ctx");
   stdin.write("\r");
   await Bun.sleep(TICK);
-  expect(submitted).toEqual([
-    { modelId: "openai/gpt-5", providers: undefined, detail: "openai/gpt-5" },
-  ]);
+  expect(picked).toEqual([{ modelId: "openai/gpt-5", providers: undefined }]);
+  // Back on the list, the pick shows as the current model.
+  expect(lastFrame()).toContain("gpt-5 · current");
+  expect(continued).toBe(0);
 });
 
 test("azure path collects resource and deployment", async () => {
   const { stdin, lastFrame } = renderModel();
+  await Bun.sleep(TICK);
+  stdin.write("\r"); // Add provider
   await Bun.sleep(TICK);
   stdin.write("azure"); // type-to-filter
   await Bun.sleep(TICK);
@@ -108,11 +116,52 @@ test("azure path collects resource and deployment", async () => {
   await Bun.sleep(TICK);
   stdin.write("\r");
   await Bun.sleep(TICK);
-  expect(submitted).toEqual([
+  expect(picked).toEqual([
     {
       modelId: "azure/gpt-5.4",
       providers: { azure: { resourceName: "opsy-aoai" } },
-      detail: "azure/gpt-5.4",
     },
   ]);
+});
+
+test("continue without a model shows an inline error", async () => {
+  const { stdin, lastFrame } = renderModel();
+  await Bun.sleep(TICK);
+  stdin.write("\x1b[B"); // Add provider -> Continue
+  await Bun.sleep(TICK);
+  stdin.write("\r");
+  await Bun.sleep(TICK);
+  expect(lastFrame()).toContain("pick a model first");
+  expect(continued).toBe(0);
+});
+
+test("configured model shows its provider row and Continue is focused", async () => {
+  store.set("openai", { type: "api", key: "sk-test" });
+  const { stdin, lastFrame } = renderModel({
+    configuredModel: "openai/gpt-5",
+  });
+  await Bun.sleep(TICK);
+  expect(lastFrame()).toContain("OpenAI");
+  expect(lastFrame()).toContain("gpt-5 · current");
+  stdin.write("\r"); // focus starts on Continue
+  await Bun.sleep(TICK);
+  expect(continued).toBe(1);
+});
+
+test("selecting a configured provider row reopens its model pick", async () => {
+  store.set("openai", { type: "api", key: "sk-test" });
+  const { stdin, lastFrame } = renderModel({
+    configuredModel: "openai/gpt-5",
+  });
+  await Bun.sleep(TICK);
+  stdin.write("\x1b[A"); // up from Continue to Add provider
+  await Bun.sleep(TICK);
+  stdin.write("\x1b[A"); // up to the OpenAI row
+  await Bun.sleep(TICK);
+  stdin.write("\r");
+  await Bun.sleep(TICK);
+  expect(lastFrame()).toContain("Pick a model");
+  stdin.write("\r");
+  await Bun.sleep(TICK);
+  expect(picked).toEqual([{ modelId: "openai/gpt-5", providers: undefined }]);
 });

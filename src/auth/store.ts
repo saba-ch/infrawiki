@@ -63,6 +63,11 @@ export class AuthStore {
     return parsed.success ? parsed.data : undefined;
   }
 
+  /** Provider ids with a stored credential (env-var auth stores nothing). */
+  providers(): string[] {
+    return Object.keys((this.readFile().providers as object) ?? {});
+  }
+
   set(id: string, credential: Credential): void {
     const data = this.readFile();
     data.providers = { ...(data.providers as object), [id]: credential };

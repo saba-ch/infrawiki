@@ -23,6 +23,10 @@ const KNOWN: Record<string, { name: string; hint: string }> = {
 };
 const PRIORITY = Object.keys(KNOWN);
 
+export function providerName(catalog: Catalog | undefined, id: string) {
+  return catalog?.[id]?.name ?? KNOWN[id]?.name ?? id;
+}
+
 function providerListOptions(catalog: Catalog | undefined) {
   const ids = catalog ? Object.keys(catalog) : PRIORITY;
   const rank = (id: string) => {
@@ -33,7 +37,7 @@ function providerListOptions(catalog: Catalog | undefined) {
     .sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))
     .map((id) => ({
       value: id,
-      label: catalog?.[id]?.name ?? KNOWN[id]?.name ?? id,
+      label: providerName(catalog, id),
       hint: KNOWN[id]?.hint,
     }));
   options.push({

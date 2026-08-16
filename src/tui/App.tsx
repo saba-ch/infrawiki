@@ -32,6 +32,7 @@ const INIT_STEPS: { id: UiStep; label: string }[] = [
 ];
 
 const UPDATE_STEPS: { id: UiStep; label: string }[] = [
+  { id: "model", label: "Model" },
   { id: "sources", label: "Sources" },
   { id: "generate", label: "Update" },
 ];
@@ -85,7 +86,7 @@ export function App({
     mode === "init" && (config.initialized || config.checkpoint !== undefined),
   );
   const [active, setActive] = useState<StepId>(
-    mode === "update" ? "sources" : (config.checkpoint?.step ?? "model"),
+    config.checkpoint?.step ?? "model",
   );
   const [details, setDetails] = useState<Partial<Record<UiStep, string>>>(() =>
     mode === "update" ? {} : seedDetails(config),
@@ -271,13 +272,20 @@ export function App({
                     <Model
                       catalog={catalog}
                       store={store}
-                      onSubmit={(modelId, providers, detail) => {
+                      configuredModel={config.model}
+                      onPick={(modelId, providers) =>
                         config.update({
                           model: modelId,
                           providers: { ...config.providers, ...providers },
-                          init: { step: "sources" },
-                        });
-                        setDetails((d) => ({ ...d, model: detail }));
+                        })
+                      }
+                      onBack={() => {
+                        if (mode === "update") exit();
+                      }}
+                      onContinue={() => {
+                        setDetails((d) => ({ ...d, model: config.model }));
+                        if (mode === "init")
+                          config.update({ init: { step: "sources" } });
                         setActive("sources");
                       }}
                     />
@@ -290,9 +298,7 @@ export function App({
                     api={awsApi}
                     focusContinue={mode === "update"}
                     onHint={setSourcesHint}
-                    onBack={() =>
-                      mode === "update" ? exit() : setActive("model")
-                    }
+                    onBack={() => setActive("model")}
                     onContinue={(detail) => {
                       setDetails((d) => ({ ...d, sources: detail }));
                       if (mode === "update") {

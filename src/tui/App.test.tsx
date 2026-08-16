@@ -6,6 +6,7 @@ import type { LanguageModelV3StreamPart } from "@ai-sdk/provider";
 import { IndexState, IndexType } from "@aws-sdk/client-resource-explorer-2";
 import { convertArrayToReadableStream, MockLanguageModelV3 } from "ai/test";
 import { render } from "ink-testing-library";
+import { AuthStore } from "../auth/store";
 import type { Catalog } from "../catalog";
 import { Config } from "../config";
 import type { AwsApi } from "../connectors/aws";
@@ -145,8 +146,11 @@ function readMeta(dataDir: string) {
   return meta;
 }
 
-// Drives the model step: openai -> API key -> masked key -> pick gpt-5.
+// Drives the model step: Add provider -> openai -> API key -> masked key ->
+// pick gpt-5 -> Continue (focused once a model is configured).
 async function completeModelStep(stdin: { write: (data: string) => void }) {
+  stdin.write("\r"); // fresh list: Add provider is the first row
+  await Bun.sleep(TICK);
   stdin.write("\r"); // openai ranks first
   await Bun.sleep(TICK);
   stdin.write("\x1b[B"); // oauth -> api key
@@ -158,6 +162,8 @@ async function completeModelStep(stdin: { write: (data: string) => void }) {
   stdin.write("\r");
   await Bun.sleep(TICK);
   stdin.write("\r"); // select gpt-5
+  await Bun.sleep(TICK);
+  stdin.write("\r"); // back on the list with Continue focused
   await Bun.sleep(TICK);
 }
 
@@ -177,7 +183,8 @@ test("fresh project starts on the model step", async () => {
   expect(lastFrame()).toContain("○ Sources");
   expect(lastFrame()).toContain("○ Output");
   expect(lastFrame()).toContain("○ Instructions");
-  expect(lastFrame()).toContain("Which model provider");
+  expect(lastFrame()).toContain("Add provider");
+  expect(lastFrame()).toContain("Continue");
 });
 
 test("full run without sources initializes but skips generation", async () => {
@@ -257,7 +264,7 @@ test("esc walks back from output to sources to model", async () => {
   expect(lastFrame()).toContain("Add AWS");
   stdin.write("\x1b");
   await Bun.sleep(TICK * 2);
-  expect(lastFrame()).toContain("Which model provider");
+  expect(lastFrame()).toContain("gpt-5 · current");
 });
 
 test("unfinished setup resumes with model and output details seeded", async () => {
@@ -298,7 +305,7 @@ test("start over wipes configured sources", async () => {
   stdin.write("\r");
   await Bun.sleep(TICK);
   expect(listSources(config.stateDir)).toEqual([]);
-  expect(lastFrame()).toContain("Which model provider");
+  expect(lastFrame()).toContain("Add provider");
 });
 
 test("generate syncs configured sources before the run", async () => {
@@ -396,10 +403,15 @@ test("update runs the delta prompt and advances processed", async () => {
     "update",
   );
   await Bun.sleep(TICK);
-  // Starts directly on sources with only the two update steps.
-  expect(lastFrame()).toContain("❯ Sources");
+  // Starts on the model step with the configured provider row and Continue
+  // focused, so enter proceeds straight to sources.
+  expect(lastFrame()).toContain("❯ Model");
   expect(lastFrame()).toContain("○ Update");
-  expect(lastFrame()).not.toContain("Model");
+  expect(lastFrame()).toContain("gpt-5 · current");
+  expect(lastFrame()).toContain("❯ Continue");
+  stdin.write("\r");
+  await Bun.sleep(TICK);
+  expect(lastFrame()).toContain("❯ Sources");
   // The highlight starts on Continue, so enter proceeds straight to the run.
   expect(lastFrame()).toContain("❯ Continue");
   stdin.write("\r");
@@ -422,6 +434,40 @@ test("update runs the delta prompt and advances processed", async () => {
   expect(Config.load(projectDir, home).checkpoint).toBeUndefined();
 });
 
+test("update can toggle to another authenticated provider", async () => {
+  const awsApi = fakeAwsApi({
+    listResources: async () => [{ Arn: "arn:aws:s3:::bucket" }],
+  });
+  const { config } = await initializedProject(awsApi);
+  // A second stored credential shows up as its own provider row.
+  AuthStore.load(config.stateDir).set("anthropic", {
+    type: "api",
+    key: "sk-a",
+  });
+  const { lastFrame, stdin } = renderApp(
+    Config.load(projectDir, home),
+    undefined,
+    awsApi,
+    "update",
+  );
+  await Bun.sleep(TICK);
+  // Rows: OpenAI (current), anthropic, Add provider, ❯ Continue.
+  stdin.write("\x1b[A"); // up to Add provider
+  await Bun.sleep(TICK);
+  stdin.write("\x1b[A"); // up to anthropic
+  await Bun.sleep(TICK);
+  stdin.write("\r");
+  await Bun.sleep(TICK);
+  // anthropic is not in the test catalog, so the pick falls back to manual.
+  expect(lastFrame()).toContain("Model id");
+  stdin.write("claude-fable-5");
+  await Bun.sleep(TICK);
+  stdin.write("\r");
+  await Bun.sleep(TICK);
+  expect(lastFrame()).toContain("claude-fable-5 · current");
+  expect(Config.load(projectDir, home).model).toBe("anthropic/claude-fable-5");
+});
+
 test("failed update run does not advance processed", async () => {
   const awsApi = fakeAwsApi({
     listResources: async () => [{ Arn: "arn:aws:s3:::bucket" }],
@@ -438,7 +484,9 @@ test("failed update run does not advance processed", async () => {
     "update",
   );
   await Bun.sleep(TICK);
-  stdin.write("\r"); // highlight starts on Continue
+  stdin.write("\r"); // model step: highlight starts on Continue
+  await Bun.sleep(TICK);
+  stdin.write("\r"); // sources step: highlight starts on Continue
   await Bun.sleep(TICK * 3);
   const done = frames.find((frame) => frame.includes("generation failed"));
   expect(done).toBeDefined();
