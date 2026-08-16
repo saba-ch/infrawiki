@@ -39,6 +39,14 @@ export interface InitResult {
 // here and stated in the agent's system prompt (agent/loop.ts).
 export const OKF_VERSION = "0.2";
 
+// Reserved page names in the bundle: index/log/instructions are seeded here,
+// _skeleton.md is the agent's transient planning file. The visualizer treats
+// all of them as non-concept pages.
+export const INDEX_PAGE = "index.md";
+export const LOG_PAGE = "log.md";
+export const INSTRUCTIONS_PAGE = "instructions.md";
+export const SKELETON_PAGE = "_skeleton.md";
+
 export const DEFAULT_INSTRUCTIONS = `# Wiki instructions
 
 These instructions guide how InfraWiki generates and maintains this wiki.
@@ -112,7 +120,7 @@ export class Config {
   }
 
   get instructionsPath(): string {
-    return join(this.outputPath, "instructions.md");
+    return join(this.outputPath, INSTRUCTIONS_PAGE);
   }
 
   update(patch: Partial<ConfigData>): void {
@@ -136,10 +144,10 @@ export class Config {
 
     // Seed the OKF bundle root; the agent fills bodies. Re-init must not wipe
     // a populated wiki root, so only write what's missing.
-    const indexPath = join(outputPath, "index.md");
+    const indexPath = join(outputPath, INDEX_PAGE);
     if (!existsSync(indexPath))
       writeFileSync(indexPath, `---\nokf_version: "${OKF_VERSION}"\n---\n`);
-    const logPath = join(outputPath, "log.md");
+    const logPath = join(outputPath, LOG_PAGE);
     if (!existsSync(logPath)) writeFileSync(logPath, "");
 
     return { stateDir, instructionsPath };

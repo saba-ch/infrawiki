@@ -23,6 +23,15 @@ program
     await runUpdate();
   });
 
+program
+  .command("visualize")
+  .description("Render the wiki as an interactive graph and open it")
+  .option("--no-open", "do not open the browser automatically")
+  .action(async (opts: { open: boolean }) => {
+    const { runVisualize } = await import("./commands/visualize");
+    await runVisualize({ open: opts.open });
+  });
+
 program.action(() => {
   const config = Config.load(process.cwd());
   if (!config.initialized) {

@@ -1,9 +1,9 @@
-import { spawn } from "node:child_process";
 import { Box, Text, useInput } from "ink";
 import { useEffect, useState } from "react";
 import { FLOWS } from "../../auth/oauth";
 import type { AuthEvent, AuthPrompt } from "../../auth/oauth/types";
 import { type AuthStore, apiKeyEnvNames } from "../../auth/store";
+import { openBrowser } from "../../browser";
 import type { Catalog } from "../../catalog";
 import type { ProviderOptions } from "../../config";
 import { SearchSelect } from "../components/SearchSelect";
@@ -71,11 +71,6 @@ interface Props {
   catalog?: Catalog;
   store: AuthStore;
   onDone: (provider: string, options?: ProviderOptions) => void;
-}
-
-function openInBrowser(url: string): void {
-  // Fire-and-forget; the URL is always shown for manual opening too.
-  spawn("open", [url], { stdio: "ignore", detached: true }).unref();
 }
 
 function detectedEnvVar(catalog: Catalog | undefined, provider: string) {
@@ -168,7 +163,7 @@ export function ProviderAuth({ catalog, store, onDone }: Props) {
           setOauth((v) => {
             switch (event.type) {
               case "auth_url":
-                openInBrowser(event.url);
+                openBrowser(event.url);
                 return {
                   ...v,
                   authUrl: event.url,
@@ -177,7 +172,7 @@ export function ProviderAuth({ catalog, store, onDone }: Props) {
                     : v.lines,
                 };
               case "device_code":
-                openInBrowser(event.verificationUri);
+                openBrowser(event.verificationUri);
                 return { ...v, device: event };
               default:
                 return { ...v, lines: [...v.lines, event.message] };
