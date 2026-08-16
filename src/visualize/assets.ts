@@ -4,7 +4,8 @@
 // Modified: internal links are looked up in the generator-resolved
 // bundle.links map instead of client-side path arithmetic; the initial
 // selection is the generator-chosen bundle.entry instead of a
-// BigQuery-specific type heuristic.
+// BigQuery-specific type heuristic; added a dark theme with a header
+// toggle (persisted, defaulting to the OS preference).
 
 /**
  * The viewer page template. The generator fills the CSS/JS markers and the
@@ -41,6 +42,10 @@ export const VIZ_TEMPLATE = `<!DOCTYPE html>
       <option value="grid">grid</option>
     </select>
     <button id="reset">Reset view</button>
+    <button id="theme-toggle" title="Toggle theme">
+      <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
   </div>
 </header>
 
@@ -87,13 +92,49 @@ window.BUNDLE = __BUNDLE_DATA__;
 /**
  * Stylesheet inlined into the template's CSS marker.
  */
-export const VIZ_CSS = `* { box-sizing: border-box; }
+export const VIZ_CSS = `:root {
+  --bg: #f8fafc;
+  --surface: #fff;
+  --border: #e2e8f0;
+  --text: #0f172a;
+  --muted: #64748b;
+  --input-border: #cbd5e1;
+  --btn-bg: #f1f5f9;
+  --btn-hover: #e2e8f0;
+  --code-bg: #f1f5f9;
+  --link: #2563eb;
+  --graph-bg: #fff;
+  --node-label: #0f172a;
+  --graph-edge: #cbd5e1;
+  --highlight: #f59e0b;
+  --pre-bg: #0f172a;
+  --pre-text: #e2e8f0;
+}
+:root[data-theme="dark"] {
+  --bg: #000;
+  --surface: #0a0a0a;
+  --border: #2e2e2e;
+  --text: #ededed;
+  --muted: #a1a1a1;
+  --input-border: #2e2e2e;
+  --btn-bg: #1a1a1a;
+  --btn-hover: #2a2a2a;
+  --code-bg: #1a1a1a;
+  --link: #52a8ff;
+  --graph-bg: #000;
+  --node-label: #ededed;
+  --graph-edge: #333;
+  --highlight: #52a8ff;
+  --pre-bg: #111;
+  --pre-text: #ededed;
+}
+* { box-sizing: border-box; }
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   font-size: 14px;
-  color: #0f172a;
-  background: #f8fafc;
+  color: var(--text);
+  background: var(--bg);
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -103,23 +144,33 @@ header {
   align-items: center;
   justify-content: space-between;
   padding: 10px 16px;
-  background: #fff;
-  border-bottom: 1px solid #e2e8f0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 .title strong { font-size: 16px; margin-right: 8px; }
-.muted { color: #64748b; font-size: 12px; }
+.muted { color: var(--muted); font-size: 12px; }
 .controls { display: flex; gap: 8px; }
 .controls input, .controls select, .controls button {
   font-size: 13px;
   padding: 5px 8px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--input-border);
   border-radius: 4px;
-  background: #fff;
+  background: var(--surface);
+  color: var(--text);
 }
 .controls input { width: 220px; }
-.controls button { cursor: pointer; background: #f1f5f9; }
-.controls button:hover { background: #e2e8f0; }
+.controls button { cursor: pointer; background: var(--btn-bg); }
+.controls button:hover { background: var(--btn-hover); }
+#theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+#theme-toggle svg { width: 15px; height: 15px; }
+#theme-toggle .icon-sun { display: none; }
+:root[data-theme="dark"] #theme-toggle .icon-sun { display: block; }
+:root[data-theme="dark"] #theme-toggle .icon-moon { display: none; }
 
 main {
   display: flex;
@@ -128,8 +179,8 @@ main {
 }
 #graph {
   flex: 1 1 60%;
-  background: #fff;
-  border-right: 1px solid #e2e8f0;
+  background: var(--graph-bg);
+  border-right: 1px solid var(--border);
   min-width: 0;
   position: relative;
 }
@@ -137,7 +188,7 @@ main {
   flex: 0 0 40%;
   overflow-y: auto;
   padding: 18px 22px;
-  background: #fff;
+  background: var(--surface);
 }
 #detail-empty {
   text-align: center;
@@ -170,19 +221,19 @@ dl.frontmatter {
   font-size: 13px;
 }
 dl.frontmatter dt {
-  color: #64748b;
+  color: var(--muted);
   font-weight: 500;
 }
 dl.frontmatter dd { margin: 0; }
-dl.frontmatter a { color: #2563eb; word-break: break-all; }
+dl.frontmatter a { color: var(--link); word-break: break-all; }
 
 .tag {
   display: inline-block;
   padding: 1px 6px;
   margin: 0 4px 2px 0;
   border-radius: 4px;
-  background: #f1f5f9;
-  color: #475569;
+  background: var(--btn-bg);
+  color: var(--muted);
   font-size: 11px;
 }
 
@@ -208,30 +259,39 @@ dl.frontmatter a { color: #2563eb; word-break: break-all; }
 .badge.trust-human-reviewed { background: #f5f3ff; color: #6d28d9; border-color: #ddd6fe; }
 .badge.stale { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
 .badge.fresh { background: #ecfdf5; color: #047857; border-color: #a7f3d0; }
+:root[data-theme="dark"] .badge.status-stable,
+:root[data-theme="dark"] .badge.fresh { background: rgba(52,211,153,0.12); color: #6ee7b7; border-color: rgba(52,211,153,0.35); }
+:root[data-theme="dark"] .badge.status-draft { background: rgba(250,204,21,0.1); color: #fde047; border-color: rgba(250,204,21,0.3); }
+:root[data-theme="dark"] .badge.status-deprecated,
+:root[data-theme="dark"] .badge.trust-unverified { background: rgba(161,161,161,0.12); color: #a1a1a1; border-color: rgba(161,161,161,0.35); }
+:root[data-theme="dark"] .badge.trust-machine-confirmed { background: rgba(82,168,255,0.12); color: #52a8ff; border-color: rgba(82,168,255,0.35); }
+:root[data-theme="dark"] .badge.trust-human-reviewed { background: rgba(213,195,247,0.12); color: #d5c3f7; border-color: rgba(213,195,247,0.35); }
+:root[data-theme="dark"] .badge.stale { background: rgba(248,113,113,0.12); color: #f87171; border-color: rgba(248,113,113,0.35); }
 
 .sources-list { padding-left: 18px; margin: 0; }
 .sources-list li { margin: 1px 0; }
 
-hr { border: none; border-top: 1px solid #e2e8f0; margin: 14px 0; }
+hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
 
 #detail-body { font-size: 13px; line-height: 1.55; }
 #detail-body h1 {
   font-size: 16px; margin: 18px 0 6px;
-  padding-bottom: 4px; border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 4px; border-bottom: 1px solid var(--border);
 }
 #detail-body h2 { font-size: 14px; margin: 14px 0 4px; }
 #detail-body h3 { font-size: 13px; margin: 12px 0 4px; }
 #detail-body p { margin: 6px 0; }
 #detail-body code {
-  background: #f1f5f9;
+  background: var(--code-bg);
   padding: 1px 4px;
   border-radius: 3px;
   font-size: 12px;
   font-family: ui-monospace, "SF Mono", Consolas, monospace;
 }
 #detail-body pre {
-  background: #0f172a;
-  color: #e2e8f0;
+  background: var(--pre-bg);
+  color: var(--pre-text);
+  border: 1px solid var(--border);
   padding: 10px 12px;
   border-radius: 6px;
   overflow-x: auto;
@@ -242,15 +302,15 @@ hr { border: none; border-top: 1px solid #e2e8f0; margin: 14px 0; }
 #detail-body li { margin: 2px 0; }
 #detail-body table { border-collapse: collapse; margin: 8px 0; }
 #detail-body th, #detail-body td {
-  border: 1px solid #e2e8f0; padding: 4px 8px; font-size: 12px;
+  border: 1px solid var(--border); padding: 4px 8px; font-size: 12px;
 }
-#detail-body a.internal { color: #2563eb; cursor: pointer; }
-#detail-body a.external { color: #2563eb; }
+#detail-body a.internal { color: var(--link); cursor: pointer; }
+#detail-body a.external { color: var(--link); }
 
 #detail-backlinks { margin-top: 18px; }
-#detail-backlinks h2 { font-size: 13px; color: #64748b; margin-bottom: 6px; }
+#detail-backlinks h2 { font-size: 13px; color: var(--muted); margin-bottom: 6px; }
 #detail-backlinks ul { padding-left: 18px; }
-#detail-backlinks a { color: #2563eb; cursor: pointer; }
+#detail-backlinks a { color: var(--link); cursor: pointer; }
 `;
 
 /**
@@ -261,6 +321,22 @@ export const VIZ_JS = `(function () {
   const bundleName = window.BUNDLE_NAME;
   document.title = \`\${bundleName} — OKF Viewer\`;
   document.getElementById("bundle-name").textContent = bundleName;
+
+  // Theme: saved choice wins, else OS preference. Graph colors are function
+  // values reading the theme's CSS variables, so a toggle only needs
+  // cy.style().update().
+  let theme =
+    localStorage.getItem("okf-viz-theme") ||
+    (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  document.documentElement.dataset.theme = theme;
+  const cssVar = (name) =>
+    getComputedStyle(document.body).getPropertyValue(name).trim();
+  document.getElementById("theme-toggle").addEventListener("click", () => {
+    theme = theme === "dark" ? "light" : "dark";
+    localStorage.setItem("okf-viz-theme", theme);
+    document.documentElement.dataset.theme = theme;
+    cy.style().update();
+  });
 
   // Populate type filter
   const typeSelect = document.getElementById("filter-type");
@@ -291,7 +367,7 @@ export const VIZ_JS = `(function () {
         style: {
           "background-color": "data(color)",
           "label": "data(label)",
-          "color": "#0f172a",
+          "color": () => cssVar("--node-label"),
           "font-size": 11,
           "text-valign": "bottom",
           "text-margin-y": 4,
@@ -299,8 +375,8 @@ export const VIZ_JS = `(function () {
           "text-max-width": 120,
           "width": "data(size)",
           "height": "data(size)",
-          "border-width": 1,
-          "border-color": "#0f172a",
+          "border-width": () => (theme === "dark" ? 0 : 1),
+          "border-color": () => cssVar("--node-label"),
         },
       },
       {
@@ -321,15 +397,15 @@ export const VIZ_JS = `(function () {
         selector: "node:selected",
         style: {
           "border-width": 3,
-          "border-color": "#f59e0b",
+          "border-color": () => cssVar("--highlight"),
         },
       },
       {
         selector: "edge",
         style: {
           "width": 1.5,
-          "line-color": "#cbd5e1",
-          "target-arrow-color": "#cbd5e1",
+          "line-color": () => cssVar("--graph-edge"),
+          "target-arrow-color": () => cssVar("--graph-edge"),
           "target-arrow-shape": "triangle",
           "curve-style": "bezier",
           "arrow-scale": 0.9,
@@ -338,8 +414,8 @@ export const VIZ_JS = `(function () {
       {
         selector: "edge:selected",
         style: {
-          "line-color": "#f59e0b",
-          "target-arrow-color": "#f59e0b",
+          "line-color": () => cssVar("--highlight"),
+          "target-arrow-color": () => cssVar("--highlight"),
           "width": 2.5,
         },
       },
