@@ -20,9 +20,18 @@ interface Props {
   onBack: () => void;
   /** Reports the keys valid right now for the App's single hint line. */
   onHint: (hint: string) => void;
+  /** Start the highlight on Continue (update runs usually just proceed). */
+  focusContinue?: boolean;
 }
 
-export function Sources({ stateDir, api, onContinue, onBack, onHint }: Props) {
+export function Sources({
+  stateDir,
+  api,
+  onContinue,
+  onBack,
+  onHint,
+  focusContinue,
+}: Props) {
   const [phase, setPhase] = useState<Phase>({ id: "list" });
   const [sources, setSources] = useState(() => listSources(stateDir));
   const [continueError, setContinueError] = useState<string>();
@@ -53,20 +62,27 @@ export function Sources({ stateDir, api, onContinue, onBack, onHint }: Props) {
     );
   }
 
+  const options = [
+    ...sources.map((source) => ({
+      label: sourceLabel(source),
+      value: source.accountId,
+      hint: sourceSummary(source),
+    })),
+    { label: "Add AWS", value: "add-aws" },
+    { label: "Continue", value: "continue" },
+  ];
+
   return (
     <Box flexDirection="column">
       <Text bold>Sources</Text>
       {continueError ? <Text color="red">{continueError}</Text> : null}
       <Select
-        options={[
-          ...sources.map((source) => ({
-            label: sourceLabel(source),
-            value: source.accountId,
-            hint: sourceSummary(source),
-          })),
-          { label: "Add AWS", value: "add-aws" },
-          { label: "Continue", value: "continue" },
-        ]}
+        options={options}
+        initialIndex={
+          focusContinue
+            ? options.findIndex((o) => o.value === "continue")
+            : undefined
+        }
         onSelect={(value) => {
           if (value === "continue") {
             const incomplete = sources.find(

@@ -15,7 +15,14 @@ import {
   devSource,
   fakeAwsApi,
 } from "../connectors/aws.fixtures";
-import { listSources, saveSource } from "../sources";
+import {
+  fetchSource,
+  listSources,
+  markProcessed,
+  readMeta as readMetaOrUndefined,
+  saveSource,
+  sourceDataDir,
+} from "../sources";
 import { App } from "./App";
 
 let projectDir: string;
@@ -103,15 +110,39 @@ function renderApp(
   config: Config,
   model?: MockLanguageModelV3,
   awsApi?: AwsApi,
+  mode?: "init" | "update",
 ) {
   return render(
     <App
       config={config}
       catalog={Promise.resolve(CATALOG)}
+      mode={mode}
       model={model}
       awsApi={awsApi}
     />,
   );
+}
+
+// An initialized project with a model, one fetched AWS source, and the wiki
+// documenting that snapshot (processed === latest) — the update baseline.
+async function initializedProject(awsApi: AwsApi) {
+  const config = Config.load(projectDir, home);
+  config.update({ model: "openai/gpt-5" });
+  const s = devSource({
+    regions: [{ name: "us-east-1", index: IndexType.AGGREGATOR }],
+  });
+  saveSource(config.stateDir, s);
+  await fetchSource(awsApi, config.stateDir, s);
+  config.initialize("Document everything.");
+  markProcessed(config.stateDir);
+  return { config, dataDir: sourceDataDir(config.stateDir, s) };
+}
+
+// Meta is always present where these tests read it; fail loudly otherwise.
+function readMeta(dataDir: string) {
+  const meta = readMetaOrUndefined(dataDir);
+  if (!meta) throw new Error(`no meta.json in ${dataDir}`);
+  return meta;
 }
 
 // Drives the model step: openai -> API key -> masked key -> pick gpt-5.
@@ -297,18 +328,13 @@ test("generate syncs configured sources before the run", async () => {
   );
   expect(done).toBeDefined();
   expect(done).not.toContain("generation failed");
+  const dataDir = join(config.stateDir, "sources", "aws-123456789012", "data");
+  const meta = readMeta(dataDir);
   expect(
-    readFileSync(
-      join(
-        config.stateDir,
-        "sources",
-        "aws-123456789012",
-        "data",
-        "resources.jsonl",
-      ),
-      "utf8",
-    ),
+    readFileSync(join(dataDir, meta.latest, "resources.jsonl"), "utf8"),
   ).toBe('{"Arn":"arn:aws:s3:::bucket"}\n');
+  // A successful init run is the first processed baseline.
+  expect(meta.processed).toBe(meta.latest);
 });
 
 test("adding an aws source persists it and checkpoints past sources", async () => {
@@ -354,4 +380,68 @@ test("adding an aws source persists it and checkpoints past sources", async () =
       join(reloaded.stateDir, "sources", "aws-123456789012", "source.json"),
     ),
   ).toBe(true);
+});
+
+test("update runs the delta prompt and advances processed", async () => {
+  const awsApi = fakeAwsApi({
+    listResources: async () => [{ Arn: "arn:aws:s3:::bucket" }],
+  });
+  const { dataDir } = await initializedProject(awsApi);
+  const baseline = readMeta(dataDir).latest;
+  const model = mockGenerationModel();
+  const { frames, lastFrame, stdin } = renderApp(
+    Config.load(projectDir, home),
+    model,
+    awsApi,
+    "update",
+  );
+  await Bun.sleep(TICK);
+  // Starts directly on sources with only the two update steps.
+  expect(lastFrame()).toContain("❯ Sources");
+  expect(lastFrame()).toContain("○ Update");
+  expect(lastFrame()).not.toContain("Model");
+  // The highlight starts on Continue, so enter proceeds straight to the run.
+  expect(lastFrame()).toContain("❯ Continue");
+  stdin.write("\r");
+  await Bun.sleep(TICK * 3);
+  const done = frames.find((frame) => frame.includes("Updated wiki at"));
+  expect(done).toBeDefined();
+  expect(done).not.toContain("generation failed");
+
+  // The run got the update prompt pointing at baseline and fresh snapshots.
+  const meta = readMeta(dataDir);
+  const prompt = JSON.stringify(model.doStreamCalls[0]?.prompt);
+  expect(prompt).toContain("update the existing wiki");
+  expect(prompt).toContain(join(dataDir, baseline, "resources.jsonl"));
+  expect(prompt).toContain(join(dataDir, meta.latest, "resources.jsonl"));
+
+  // The sync pulled a fresh snapshot and success marked it processed.
+  expect(meta.latest).not.toBe(baseline);
+  expect(meta.processed).toBe(meta.latest);
+  // No init checkpoint was written by the update wizard.
+  expect(Config.load(projectDir, home).checkpoint).toBeUndefined();
+});
+
+test("failed update run does not advance processed", async () => {
+  const awsApi = fakeAwsApi({
+    listResources: async () => [{ Arn: "arn:aws:s3:::bucket" }],
+  });
+  const { dataDir } = await initializedProject(awsApi);
+  const baseline = readMeta(dataDir).latest;
+  const model = new MockLanguageModelV3({
+    doStream: [streamOf([{ type: "error", error: new Error("boom") }])],
+  });
+  const { frames, stdin } = renderApp(
+    Config.load(projectDir, home),
+    model,
+    awsApi,
+    "update",
+  );
+  await Bun.sleep(TICK);
+  stdin.write("\r"); // highlight starts on Continue
+  await Bun.sleep(TICK * 3);
+  const done = frames.find((frame) => frame.includes("generation failed"));
+  expect(done).toBeDefined();
+  // The wiki still documents the baseline; the next update diffs against it.
+  expect(readMeta(dataDir).processed).toBe(baseline);
 });

@@ -10,12 +10,14 @@ interface Option {
 interface Props {
   options: Option[];
   onSelect: (value: string) => void;
+  /** Which option the highlight starts on (default first). */
+  initialIndex?: number;
 }
 
 // Stateless-by-design: only tracks the highlight, never "commits", so it
 // stays interactive across repeated selections (e.g. edit -> return -> edit).
-export function Select({ options, onSelect }: Props) {
-  const [index, setIndex] = useState(0);
+export function Select({ options, onSelect, initialIndex = 0 }: Props) {
+  const [index, setIndex] = useState(initialIndex);
 
   useInput((_input, key) => {
     if (key.upArrow) {

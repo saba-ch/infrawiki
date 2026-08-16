@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
   statSync,
+  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -13,12 +15,21 @@ import {
   fetchSource,
   formatSourcesDetail,
   listSources,
+  markProcessed,
+  readMeta as readMetaOrUndefined,
   saveSource,
   sourceDataDir,
   sourcePath,
   sourcesPrompt,
   syncSources,
 } from "./sources";
+
+// Meta is always present where these tests read it; fail loudly otherwise.
+function readMeta(dataDir: string) {
+  const meta = readMetaOrUndefined(dataDir);
+  if (!meta) throw new Error(`no meta.json in ${dataDir}`);
+  return meta;
+}
 
 let stateDir: string;
 
@@ -71,18 +82,40 @@ test("sourcesPrompt assembles per-source blocks", () => {
   expect(prompt).toContain('profile "prod"');
 });
 
-test("fetchSource writes resources.jsonl and meta.json under data/", async () => {
+test("fetchSource writes a snapshot dir and the meta.json manifest", async () => {
   const s = source();
   const api = fakeAwsApi({
     listResources: async () => [{ Arn: "arn:aws:s3:::bucket" }],
   });
   await fetchSource(api, stateDir, s);
   const dataDir = sourceDataDir(stateDir, s);
-  expect(readFileSync(join(dataDir, "resources.jsonl"), "utf8")).toBe(
-    '{"Arn":"arn:aws:s3:::bucket"}\n',
-  );
-  const meta = JSON.parse(readFileSync(join(dataDir, "meta.json"), "utf8"));
+  const meta = readMeta(dataDir);
   expect(new Date(meta.fetchedAt).toISOString()).toBe(meta.fetchedAt);
+  expect(meta.processed).toBeUndefined();
+  expect(
+    readFileSync(join(dataDir, meta.latest, "resources.jsonl"), "utf8"),
+  ).toBe('{"Arn":"arn:aws:s3:::bucket"}\n');
+});
+
+test("snapshots accumulate; processed survives refetch until markProcessed", async () => {
+  const s = source();
+  saveSource(stateDir, s);
+  const dataDir = sourceDataDir(stateDir, s);
+  await fetchSource(fakeAwsApi(), stateDir, s);
+  const first = readMeta(dataDir).latest;
+
+  markProcessed(stateDir);
+  expect(readMeta(dataDir).processed).toBe(first);
+
+  await fetchSource(fakeAwsApi(), stateDir, s);
+  const meta = readMeta(dataDir);
+  expect(meta.latest).not.toBe(first);
+  expect(meta.processed).toBe(first);
+  expect(existsSync(join(dataDir, first, "resources.jsonl"))).toBe(true);
+  expect(existsSync(join(dataDir, meta.latest, "resources.jsonl"))).toBe(true);
+
+  markProcessed(stateDir);
+  expect(readMeta(dataDir).processed).toBe(meta.latest);
 });
 
 test("fetchSource failure leaves no meta.json", async () => {
@@ -152,10 +185,48 @@ test("sourcesPrompt points at fetched data once a pull completed", async () => {
   const s = source();
   saveSource(stateDir, s);
   await fetchSource(fakeAwsApi(), stateDir, s);
+  const dataDir = sourceDataDir(stateDir, s);
   const prompt = sourcesPrompt(stateDir, [s]);
-  expect(prompt).toContain(join(sourceDataDir(stateDir, s), "resources.jsonl"));
+  expect(prompt).toContain(
+    join(dataDir, readMeta(dataDir).latest, "resources.jsonl"),
+  );
   expect(prompt).toContain("do not run resource-explorer-2 yourself");
   expect(prompt).not.toContain("aws resource-explorer-2 list-resources");
+  // No baseline yet — nothing to diff against.
+  expect(prompt).not.toContain("last wiki update");
+});
+
+test("sourcesPrompt adds the previous inventory only once a processed baseline differs", async () => {
+  const s = source();
+  saveSource(stateDir, s);
+  const dataDir = sourceDataDir(stateDir, s);
+  await fetchSource(fakeAwsApi(), stateDir, s);
+  markProcessed(stateDir);
+  // Processed === latest: the wiki already documents this snapshot.
+  expect(sourcesPrompt(stateDir, [s])).not.toContain("last wiki update");
+
+  await fetchSource(fakeAwsApi(), stateDir, s);
+  const meta = readMeta(dataDir);
+  const prompt = sourcesPrompt(stateDir, [s]);
+  expect(prompt).toContain(
+    `The inventory as of the last wiki update is at ${join(dataDir, meta.processed as string, "resources.jsonl")}`,
+  );
+  expect(prompt).toContain(join(dataDir, meta.latest, "resources.jsonl"));
+});
+
+test("legacy pre-snapshot meta.json is treated as no data", () => {
+  const s = source();
+  saveSource(stateDir, s);
+  const dataDir = sourceDataDir(stateDir, s);
+  mkdirSync(dataDir, { recursive: true });
+  writeFileSync(
+    join(dataDir, "meta.json"),
+    '{"fetchedAt":"2026-08-12T00:00:00.000Z"}\n',
+  );
+  writeFileSync(join(dataDir, "resources.jsonl"), "{}\n");
+  const prompt = sourcesPrompt(stateDir, [s]);
+  expect(prompt).toContain("aws resource-explorer-2 list-resources");
+  expect(prompt).not.toContain("resources.jsonl");
 });
 
 test("formatSourcesDetail", () => {

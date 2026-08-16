@@ -15,6 +15,14 @@ program
     await runInit();
   });
 
+program
+  .command("update")
+  .description("Update the wiki from the sources' current state")
+  .action(async () => {
+    const { runUpdate } = await import("./commands/update");
+    await runUpdate();
+  });
+
 program.action(() => {
   const config = Config.load(process.cwd());
   if (!config.initialized) {

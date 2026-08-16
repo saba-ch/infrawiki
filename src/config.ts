@@ -111,6 +111,10 @@ export class Config {
     return join(this.projectDir, Config.FILE);
   }
 
+  get instructionsPath(): string {
+    return join(this.outputPath, "instructions.md");
+  }
+
   update(patch: Partial<ConfigData>): void {
     this.data = { ...this.data, ...patch };
     writeFileSync(this.configPath, `${JSON.stringify(this.data, null, 2)}\n`);
@@ -127,7 +131,7 @@ export class Config {
 
     const outputPath = this.outputPath;
     mkdirSync(outputPath, { recursive: true });
-    const instructionsPath = join(outputPath, "instructions.md");
+    const instructionsPath = this.instructionsPath;
     writeFileSync(instructionsPath, instructions);
 
     // Seed the OKF bundle root; the agent fills bodies. Re-init must not wipe

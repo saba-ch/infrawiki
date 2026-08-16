@@ -7,7 +7,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
-import type { z } from "zod";
+import { z } from "zod";
 import {
   type AwsApi,
   AwsSourceSchema,
@@ -63,29 +63,65 @@ export function clearSources(stateDir: string): void {
   rmSync(join(stateDir, "sources"), { recursive: true, force: true });
 }
 
+// data/meta.json manifest: which snapshot is the latest complete fetch and
+// which one the last successful run consumed. A legacy pre-snapshot meta
+// ({fetchedAt} beside a flat resources.jsonl) fails the parse and is treated
+// as no data — no migration, pre-release.
+const SourceMetaSchema = z.object({
+  latest: z.string(), // snapshot id, e.g. "20260816T142301176Z"
+  fetchedAt: z.string(), // ISO time of the latest fetch
+  processed: z.string().optional(), // snapshot last consumed by a run
+});
+
+type SourceMeta = z.infer<typeof SourceMetaSchema>;
+
+function metaPath(dataDir: string): string {
+  return join(dataDir, "meta.json");
+}
+
+export function readMeta(dataDir: string): SourceMeta | undefined {
+  const path = metaPath(dataDir);
+  if (!existsSync(path)) return undefined;
+  const parsed = SourceMetaSchema.safeParse(
+    JSON.parse(readFileSync(path, "utf8")),
+  );
+  return parsed.success ? parsed.data : undefined;
+}
+
+function writeMeta(dataDir: string, meta: SourceMeta): void {
+  writeFileSync(metaPath(dataDir), `${JSON.stringify(meta, null, 2)}\n`);
+}
+
 // Each connector defines the prompt, label, summary, and fetch for its own
 // sources; these only route by the source's type. The switches are exhaustive
 // — a new connector in the union fails typecheck until it is wired here.
 function connectorPrompt(stateDir: string, source: Source): string {
+  // The snapshot layout is connector-independent; only the prompt text is
+  // per-connector.
+  const dataDir = sourceDataDir(stateDir, source);
+  const meta = readMeta(dataDir);
+  const data = meta
+    ? {
+        dir: join(dataDir, meta.latest),
+        fetchedAt: meta.fetchedAt,
+        // Only a baseline that differs from the latest fetch is worth
+        // diffing against; a freshly connected source has none.
+        previousDir:
+          meta.processed && meta.processed !== meta.latest
+            ? join(dataDir, meta.processed)
+            : undefined,
+      }
+    : undefined;
   switch (source.type) {
-    case "aws": {
-      const dir = sourceDataDir(stateDir, source);
-      const metaPath = join(dir, "meta.json");
-      const data = existsSync(metaPath)
-        ? { dir, fetchedAt: readMeta(metaPath).fetchedAt }
-        : undefined;
+    case "aws":
       return awsPrompt(source, data);
-    }
   }
 }
 
-function readMeta(path: string): { fetchedAt: string } {
-  return JSON.parse(readFileSync(path, "utf8"));
-}
-
-// Pull a source's current raw data into its data/ dir. meta.json is written
-// only after the fetch succeeds, so a recorded fetchedAt implies complete
-// data; it grows into the state/delta manifest later.
+// Pull a source's current raw data into a new data/<snapshot>/ dir. Snapshots
+// accumulate (no pruning until it hurts); meta.json is written only after the
+// fetch succeeds, so a failed fetch leaves a dead snapshot dir and the
+// manifest still pointing at the last complete one.
 export async function fetchSource(
   api: AwsApi,
   stateDir: string,
@@ -93,16 +129,33 @@ export async function fetchSource(
   signal?: AbortSignal,
 ): Promise<void> {
   const dataDir = sourceDataDir(stateDir, source);
-  mkdirSync(dataDir, { recursive: true, mode: 0o700 });
+  // Millisecond resolution, suffixed on collision, so back-to-back fetches
+  // always get distinct snapshots.
+  const stamp = new Date().toISOString().replace(/[-:.]/g, "");
+  let id = stamp;
+  for (let n = 2; existsSync(join(dataDir, id)); n++) id = `${stamp}-${n}`;
+  const snapshotDir = join(dataDir, id);
+  mkdirSync(snapshotDir, { recursive: true, mode: 0o700 });
   switch (source.type) {
     case "aws":
-      await fetchAwsResources(api, dataDir, source, signal);
+      await fetchAwsResources(api, snapshotDir, source, signal);
       break;
   }
-  writeFileSync(
-    join(dataDir, "meta.json"),
-    `${JSON.stringify({ fetchedAt: new Date().toISOString() }, null, 2)}\n`,
-  );
+  writeMeta(dataDir, {
+    latest: id,
+    fetchedAt: new Date().toISOString(),
+    processed: readMeta(dataDir)?.processed,
+  });
+}
+
+// After a successful run the latest snapshot is what the wiki now documents;
+// the next update diffs against it.
+export function markProcessed(stateDir: string): void {
+  for (const source of listSources(stateDir)) {
+    const dataDir = sourceDataDir(stateDir, source);
+    const meta = readMeta(dataDir);
+    if (meta) writeMeta(dataDir, { ...meta, processed: meta.latest });
+  }
 }
 
 export interface SyncFailure {

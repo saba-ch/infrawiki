@@ -10,6 +10,7 @@ import {
   clearSources,
   formatSourcesDetail,
   listSources,
+  markProcessed,
   syncSources,
 } from "../sources";
 import { GENERATE_HINT, Generate } from "./screens/Generate";
@@ -22,12 +23,17 @@ import { Welcome } from "./screens/Welcome";
 type StepId = InitCheckpoint["step"];
 type UiStep = StepId | "generate";
 
-const STEPS: { id: UiStep; label: string }[] = [
+const INIT_STEPS: { id: UiStep; label: string }[] = [
   { id: "model", label: "Model" },
   { id: "sources", label: "Sources" },
   { id: "output-dir", label: "Output" },
   { id: "instructions", label: "Instructions" },
   { id: "generate", label: "Generate" },
+];
+
+const UPDATE_STEPS: { id: UiStep; label: string }[] = [
+  { id: "sources", label: "Sources" },
+  { id: "generate", label: "Update" },
 ];
 
 // The sources step's hint is dynamic (reported by the screen per phase);
@@ -60,6 +66,8 @@ function seedDetails(config: Config): Partial<Record<UiStep, string>> {
 interface Props {
   config: Config;
   catalog?: Promise<Catalog | undefined>;
+  /** Update runs skip setup steps and re-run the agent against the delta. */
+  mode?: "init" | "update";
   /** Test seam: skips createModel so tests can inject a mock model. */
   model?: ProviderModel;
   /** Test seam: fake AWS client layer for the sources step. */
@@ -69,17 +77,18 @@ interface Props {
 export function App({
   config,
   catalog: catalogPromise,
+  mode = "init",
   model: modelOverride,
   awsApi: awsApiOverride,
 }: Props) {
   const [gated, setGated] = useState(
-    config.initialized || config.checkpoint !== undefined,
+    mode === "init" && (config.initialized || config.checkpoint !== undefined),
   );
   const [active, setActive] = useState<StepId>(
-    config.checkpoint?.step ?? "model",
+    mode === "update" ? "sources" : (config.checkpoint?.step ?? "model"),
   );
   const [details, setDetails] = useState<Partial<Record<UiStep, string>>>(() =>
-    seedDetails(config),
+    mode === "update" ? {} : seedDetails(config),
   );
   const [result, setResult] = useState<InitResult | null>(null);
   // summary with result === null means init finished without a generation run
@@ -138,11 +147,25 @@ export function App({
         instructionsPath: initResult.instructionsPath,
         outputPath: config.outputPath,
         stateDir: initResult.stateDir,
+        mode: mode === "update" ? "update" : "generate",
         // Unknown window (catalog unavailable) just disables compaction.
         contextWindow: catalog?.[provider]?.models[modelName]?.limit?.context,
         abortSignal: signal,
       });
     })();
+
+  // The final summary's four (mode, ran-a-generation) outcomes, flattened.
+  const heading =
+    mode === "update"
+      ? result
+        ? `Updated wiki at ${config.outputPath}`
+        : "Nothing to update"
+      : `Successfully initialized wiki at ${config.outputPath}`;
+  const hint = !result
+    ? `no sources connected — run "infrawiki ${mode}" again to connect one and generate the wiki`
+    : mode === "init"
+      ? 'run "infrawiki update" to update'
+      : undefined;
 
   // Active step wins over done (revisiting shows ❯), except in the final
   // done state where everything completed shows ✓.
@@ -182,7 +205,7 @@ export function App({
       ) : (
         <>
           <Box flexDirection="column" marginTop={1}>
-            {STEPS.map((step) => {
+            {(mode === "update" ? UPDATE_STEPS : INIT_STEPS).map((step) => {
               const badge = BADGE[stepStatus(step.id)];
               return (
                 <Box key={step.id}>
@@ -215,21 +238,19 @@ export function App({
                 }
                 start={startGeneration(result)}
                 done={summary !== null}
-                onDone={setSummary}
+                onDone={(outcome) => {
+                  // The wiki now documents the latest snapshots; the next
+                  // update diffs against them.
+                  if (!outcome.error) markProcessed(config.stateDir);
+                  setSummary(outcome);
+                }}
               />
             </Box>
           ) : null}
           {summary ? (
             <Box flexDirection="column" marginTop={1}>
-              <Text>Successfully initialized wiki at {config.outputPath}</Text>
-              {result ? (
-                <Text dimColor>run "infrawiki update" to update</Text>
-              ) : (
-                <Text dimColor>
-                  no sources connected — run "infrawiki init" again to connect
-                  one and generate the wiki
-                </Text>
-              )}
+              <Text>{heading}</Text>
+              {hint ? <Text dimColor>{hint}</Text> : null}
               {summary.error ? (
                 <Text color="red">generation failed: {summary.error}</Text>
               ) : null}
@@ -267,11 +288,26 @@ export function App({
                   <Sources
                     stateDir={config.stateDir}
                     api={awsApi}
+                    focusContinue={mode === "update"}
                     onHint={setSourcesHint}
-                    onBack={() => setActive("model")}
+                    onBack={() =>
+                      mode === "update" ? exit() : setActive("model")
+                    }
                     onContinue={(detail) => {
-                      config.update({ init: { step: "output-dir" } });
                       setDetails((d) => ({ ...d, sources: detail }));
+                      if (mode === "update") {
+                        // No checkpointing: the update wizard is two cheap
+                        // steps, redoing them costs nothing.
+                        if (listSources(config.stateDir).length === 0)
+                          setSummary({});
+                        else
+                          setResult({
+                            stateDir: config.stateDir,
+                            instructionsPath: config.instructionsPath,
+                          });
+                        return;
+                      }
+                      config.update({ init: { step: "output-dir" } });
                       setActive("output-dir");
                     }}
                   />

@@ -279,7 +279,7 @@ export async function loadRegionRows(
 }
 
 // Pull the source's full resource inventory into <dataDir>/resources.jsonl,
-// one SDK Resource JSON per line, overwriting the previous pull. An
+// one SDK Resource JSON per line (the caller picks a fresh snapshot dir). An
 // aggregator region already returns every region's resources, so it is
 // queried alone; otherwise the selected regions are queried concurrently
 // (Resource Explorer rate limits are per-region).
@@ -332,7 +332,7 @@ export function awsSummary(source: AwsSource): string {
 // to fetch one itself.
 export function awsPrompt(
   source: AwsSource,
-  data?: { dir: string; fetchedAt: string },
+  data?: { dir: string; fetchedAt: string; previousDir?: string },
 ): string {
   const regions = source.regions
     .map(
@@ -354,6 +354,9 @@ export function awsPrompt(
       `The inventory is at ${join(data.dir, "resources.jsonl")} — one resource per line as JSON ` +
       "(Arn, Region, ResourceType, Service, CfnResourceType, LastReportedAt). " +
       "Read and search that file to enumerate resources; do not run resource-explorer-2 yourself.\n" +
+      (data.previousDir
+        ? `The inventory as of the last wiki update is at ${join(data.previousDir, "resources.jsonl")} in the same format — diff it against the current inventory to find what changed.\n`
+        : "") +
       inspect
     );
   return (

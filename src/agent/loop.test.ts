@@ -7,7 +7,7 @@ import { IndexType } from "@aws-sdk/client-resource-explorer-2";
 import { type ModelMessage, ToolLoopAgent } from "ai";
 import { convertArrayToReadableStream, MockLanguageModelV3 } from "ai/test";
 import { devSource, fakeAwsApi } from "../connectors/aws.fixtures";
-import { fetchSource, saveSource, sourceDataDir } from "../sources";
+import { fetchSource, readMeta, saveSource, sourceDataDir } from "../sources";
 import { replayRunLog, runGeneration } from "./loop";
 import { createTools } from "./tools";
 
@@ -142,11 +142,49 @@ describe("runGeneration", () => {
     );
     expect(first.content).toContain("Connected sources:");
     expect(first.content).toContain("AWS account 123456789012");
-    // The prompt points at the pre-fetched inventory by absolute path.
+    // The prompt points at the pre-fetched snapshot by absolute path.
+    const dataDir = sourceDataDir(stateDir, source);
     expect(first.content).toContain(
-      join(sourceDataDir(stateDir, source), "resources.jsonl"),
+      join(dataDir, readMeta(dataDir)?.latest as string, "resources.jsonl"),
     );
     expect(first.content).toContain("never invent infrastructure");
+  });
+
+  test("update mode logs the update prompt with the same system prompt", async () => {
+    const model = new MockLanguageModelV3({
+      doStream: [
+        streamOf([
+          { type: "text-start", id: "t1" },
+          { type: "text-delta", id: "t1", delta: "ok" },
+          { type: "text-end", id: "t1" },
+          {
+            type: "finish",
+            finishReason: { unified: "stop", raw: undefined },
+            usage: USAGE,
+          },
+        ]),
+      ],
+    });
+    const { result, logPath } = await runGeneration({
+      model,
+      cwd: dir,
+      instructionsPath: join(dir, "infrawiki/instructions.md"),
+      outputPath: join(dir, "infrawiki"),
+      stateDir: join(dir, "state"),
+      mode: "update",
+    });
+    for await (const _ of result.fullStream) {
+    }
+    const first = JSON.parse(
+      readFileSync(logPath, "utf-8").trim().split("\n")[0] as string,
+    );
+    expect(first.content).toContain("update the existing wiki");
+    expect(first.content).toContain("previous inventory");
+    expect(first.content).not.toContain("_skeleton.md");
+    // Update runs keep the full OKF system prompt, example included.
+    const instructions = JSON.stringify(model.doStreamCalls[0]?.prompt[0]);
+    expect(instructions).toContain("Open Knowledge Format");
+    expect(instructions).toContain('okf_version: \\"0.2\\"');
   });
 
   test("run log replays as messages into a fresh agent", async () => {
