@@ -3,9 +3,34 @@
   "version": "0.0.1",
   "description": "Writes and maintains your infrastructure documentation for agents in Open Knowledge Format (OKF)",
   "license": "Elastic-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/saba-ch/infrawiki.git"
+  },
+  "homepage": "https://github.com/saba-ch/infrawiki#readme",
+  "bugs": "https://github.com/saba-ch/infrawiki/issues",
+  "keywords": [
+    "infrastructure",
+    "documentation",
+    "wiki",
+    "okf",
+    "open-knowledge-format",
+    "aws",
+    "agent",
+    "llm",
+    "cli",
+    "knowledge-graph"
+  ],
+  "files": [
+    "src",
+    "!src/**/*.test.ts",
+    "!src/**/*.test.tsx",
+    "LICENSE.md",
+    "THIRD_PARTY_NOTICES.md"
+  ],
   "type": "module",
   "bin": {
-    "infrawiki": "./src/index.ts"
+    "infrawiki": "src/index.ts"
   },
   "scripts": {
     "dev": "bun src/index.ts",
