@@ -3,11 +3,6 @@
     .ink { fill: #0a0a0a; }
     .sub { fill: #666666; }
     .edge { stroke: #a1a1a1; }
-    @media (prefers-color-scheme: dark) {
-      .ink { fill: #ededed; }
-      .sub { fill: #888888; }
-      .edge { stroke: #52525b; }
-    }
   </style>
 
   <!-- node-graph motif -->

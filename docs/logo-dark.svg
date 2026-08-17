@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="560" height="120" viewBox="0 0 560 120" role="img" aria-label="infrawiki">
+  <style>
+    .ink { fill: #ededed; }
+    .sub { fill: #888888; }
+    .edge { stroke: #52525b; }
+  </style>
+
+  <!-- node-graph motif -->
+  <g fill="none" stroke-width="1.5">
+    <path class="edge" d="M52 38 L86 60" />
+    <path class="edge" d="M52 38 L44 78" />
+    <path class="edge" d="M86 60 L44 78" />
+    <path class="edge" d="M86 60 L112 88" />
+    <path class="edge" d="M52 38 L96 24" />
+  </g>
+  <circle cx="52" cy="38" r="9" fill="#52a8ff" />
+  <circle cx="86" cy="60" r="11" fill="#50c878" />
+  <circle cx="44" cy="78" r="7" fill="#e0a458" />
+  <circle cx="112" cy="88" r="6" fill="#b085d6" />
+  <circle cx="96" cy="24" r="5" fill="#e78895" />
+
+  <!-- wordmark -->
+  <text x="150" y="72" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="52" letter-spacing="-1">
+    <tspan class="ink" font-weight="700">infra</tspan><tspan class="ink" font-weight="300">wiki</tspan>
+  </text>
+  <text x="152" y="98" class="sub" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" letter-spacing="2">INFRASTRUCTURE DOCS FOR AGENTS</text>
+</svg>

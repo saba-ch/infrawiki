@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/saba-ch/infrawiki/main/docs/logo.svg" alt="infrawiki" width="480" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/saba-ch/infrawiki/main/docs/logo-dark.svg" />
+    <img src="https://raw.githubusercontent.com/saba-ch/infrawiki/main/docs/logo-light.svg" alt="infrawiki" width="480" />
+  </picture>
 </p>
 
 <p align="center">
@@ -10,9 +13,7 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/infrawiki"><img src="https://img.shields.io/npm/v/infrawiki" alt="npm version" /></a>
   <a href="https://www.npmjs.com/package/infrawiki"><img src="https://img.shields.io/npm/dm/infrawiki" alt="npm downloads" /></a>
-  <a href="https://github.com/saba-ch/infrawiki/actions/workflows/ci.yml"><img src="https://github.com/saba-ch/infrawiki/actions/workflows/ci.yml/badge.svg" alt="build" /></a>
-  <a href="LICENSE.md"><img src="https://img.shields.io/badge/license-Elastic--2.0-blue" alt="license" /></a>
-</p>
+  <a href="https://github.com/saba-ch/infrawiki/actions/workflows/ci.yml"><img src="https://github.com/saba-ch/infrawiki/actions/workflows/ci.yml/badge.svg" alt="build" /></a></p>
 
 - **Grounded, not guessed** — every page is written from resources the agent actually inspected. It never invents infrastructure and never writes secrets.
 - **Plain markdown** — the wiki is a directory of `.md` files with typed frontmatter. Read it, grep it, commit it, feed it to your coding agent.
