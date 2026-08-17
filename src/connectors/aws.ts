@@ -348,7 +348,6 @@ export function awsPrompt(
   const connected = `AWS account ${source.accountId} is connected via AWS CLI profile "${source.profile}".\n`;
   const inspect =
     `Inspect specific resources with the relevant AWS service CLI command, always passing ${flags}.\n` +
-    `Create account page and write general overview of it.\n` +
     "Omit AWS-created default resources unless they are in use.";
   if (data)
     return (
