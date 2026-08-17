@@ -133,9 +133,3 @@ API keys can also be picked up from environment variables.
 - **Bun** — the CLI runs from TypeScript source.
 - **AWS CLI** with profiles in `~/.aws` — used both for auth and for the agent's deep inspection.
 - **AWS Resource Explorer 2** — an index in each region you connect; the init wizard can create local indexes or promote one to aggregator for you.
-
----
-
-## License
-
-Elastic License 2.0. Portions adapted from other projects — see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
